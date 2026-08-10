@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="theme-color" content="#5c091c"/>
+<title>Staff Login — Amritsari Kulcha</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="/assets/tailwind-config.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght@20..48,100..700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-background-cream font-body-md text-on-surface antialiased min-h-screen flex items-center justify-center p-4">
+  <div class="w-full max-w-[400px]">
+    <div class="text-center mb-stack-md">
+      <h1 class="font-display-lg text-headline-lg text-primary tracking-tight">Amritsari Kulcha</h1>
+      <p class="font-body-lg text-on-surface-variant mt-1">Staff portal</p>
+    </div>
+    <form class="bg-surface-bright border border-on-background/10 rounded-xl p-stack-md flex flex-col gap-stack-md shadow-[0_2px_8px_rgba(43,33,28,0.02)]" onsubmit="return doLogin(event)">
+      <div>
+        <label class="font-label-bold text-on-surface" for="u">Username</label>
+        <input id="u" autocomplete="username" required class="mt-1 w-full px-4 py-3 border border-outline rounded bg-surface-bright font-body-md focus:border-primary outline-none transition-colors" placeholder="kitchen_alkapuri">
+      </div>
+      <div>
+        <label class="font-label-bold text-on-surface" for="p">Password</label>
+        <input id="p" type="password" autocomplete="current-password" required class="mt-1 w-full px-4 py-3 border border-outline rounded bg-surface-bright font-body-md focus:border-primary outline-none transition-colors" placeholder="••••••••">
+      </div>
+      <p id="msg" class="font-label-sm text-error hidden"></p>
+      <button class="w-full bg-primary text-on-primary font-label-bold py-3 rounded-lg flex items-center justify-center gap-2 hover:bg-primary-container transition-colors" id="btn">
+        Log in <span class="material-symbols-outlined text-[18px]">login</span>
+      </button>
+      <p class="text-center font-label-sm text-on-surface-variant">Kitchen & reception logins are scoped to one branch. Owner login sees all branches.</p>
+    </form>
+  </div>
+<script>
+async function doLogin(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btn');
+  const msg = document.getElementById('msg');
+  msg.classList.add('hidden');
+  btn.disabled = true;
+  btn.textContent = 'Signing in…';
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: document.getElementById('u').value.trim(), password: document.getElementById('p').value })
+    });
+    const j = await r.json();
+    if (!j.success) { msg.textContent = j.error.message; msg.classList.remove('hidden'); btn.disabled = false; btn.innerHTML = 'Log in <span class="material-symbols-outlined text-[18px]">login</span>'; return; }
+    location.href = { kitchen: '/kitchen', reception: '/reception', admin: '/admin' }[j.data.role] || '/login';
+  } catch (err) {
+    msg.textContent = 'Network error, please try again';
+    msg.classList.remove('hidden');
+    btn.disabled = false; btn.innerHTML = 'Log in <span class="material-symbols-outlined text-[18px]">login</span>';
+  }
+}
+// if already logged in, go to role page
+(async () => {
+  try {
+    const r = await fetch('/api/auth/me');
+    const j = await r.json();
+    if (j.success) location.href = { kitchen: '/kitchen', reception: '/reception', admin: '/admin' }[j.data.role] || '/login';
+  } catch {}
+})();
+</script>
+</body>
+</html>

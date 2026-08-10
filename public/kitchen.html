@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="theme-color" content="#5c091c"/>
+<title>Kitchen — Amritsari Kulcha</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="/assets/tailwind-config.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght@20..48,100..700,0..1&display=swap" rel="stylesheet">
+<style>
+  .hide-scrollbar::-webkit-scrollbar { display:none; } .hide-scrollbar{ scrollbar-width:none; }
+  .stale { animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(186,26,26,.25);} 50% { box-shadow: 0 0 0 6px rgba(186,26,26,.12);} }
+</style>
+</head>
+<body class="bg-background-cream font-body-md text-on-surface antialiased min-h-screen">
+<header class="sticky top-0 z-30 bg-background border-b border-on-surface/10">
+  <div class="flex items-center justify-between px-container-margin py-unit max-w-[1200px] mx-auto">
+    <div class="flex items-center gap-3">
+      <span class="material-symbols-outlined text-primary">restaurant_menu</span>
+      <h1 class="font-headline-md text-primary">Kitchen <span class="font-body-md text-on-surface-variant" id="branch-name"></span></h1>
+      <span class="font-label-sm text-on-surface-variant flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-veg-green"></span> live · refreshes 10s</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <button class="font-label-sm px-3 py-1.5 rounded-lg border border-outline/30 text-on-surface-variant hover:bg-surface-dim" onclick="logout()">Log out</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-[1200px] mx-auto px-container-margin py-stack-md">
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-gutter" id="board"></div>
+</main>
+
+<audio id="ding" src="data:audio/wav;base64,UklGRlwAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YVwAAAB//////////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"></audio>
+
+<script>
+let session = null, orders = [], staleThresholdMin = 10;
+const COLS = [
+  { key: 'new', label: 'New', icon: 'add_circle', color: 'text-primary border-primary/30 bg-primary/5' },
+  { key: 'preparing', label: 'Preparing', icon: 'local_fire_department', color: 'text-secondary border-secondary/30 bg-secondary/5' },
+  { key: 'ready', label: 'Ready', icon: 'check_circle', color: 'text-veg-green border-veg-green/30 bg-veg-green/5' },
+  { key: 'delivered', label: 'Delivered', icon: 'room_service', color: 'text-on-surface-variant border-outline/30 bg-surface-bright' },
+];
+const rs = n => `₹${(n/100).toFixed(0)}`;
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function init() {
+  const me = await fetch('/api/auth/me').then(r => r.json());
+  if (!me.success) return location.href = '/login';
+  session = me.data;
+  document.getElementById('branch-name').textContent = `· ${session.branchId}`;
+  await loadOrders();
+  setInterval(loadOrders, 10000); // polling per PRD §5 (no SSE on serverless)
+}
+async function loadOrders() {
+  const r = await fetch(`/api/orders?branch=${session.branchId}`).then(x => x.json());
+  if (r.success) {
+    const known = new Set(orders.map(o => o.id));
+    if (orders.length && r.data.some(o => !known.has(o.id))) ding();
+    orders = r.data;
+    render();
+  }
+}
+function ding() { try { document.getElementById('ding').play(); } catch {} }
+
+function ago(ts) {
+  const s = Math.max(0, (Date.now() - new Date(ts + 'Z').getTime()) / 1000);
+  if (s < 60) return `${Math.floor(s)}s`;
+  if (s < 3600) return `${Math.floor(s/60)}m`;
+  return `${Math.floor(s/3600)}h`;
+}
+
+async function advance(order) {
+  const r = await fetch(`/api/orders/${order.id}/status`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: order.status === 'ready' ? 'delivered' : order.status === 'preparing' ? 'ready' : 'preparing' })
+  });
+  const j = await r.json();
+  if (!j.success) alert(j.error.message);
+}
+async function undo(order) {
+  const r = await fetch(`/api/orders/${order.id}/undo`, { method: 'POST' });
+  const j = await r.json();
+  if (!j.success) alert(j.error.message);
+}
+
+function card(order) {
+  const minutesOld = (Date.now() - new Date(order.created_at + 'Z').getTime()) / 60000;
+  const stale = order.status === 'new' && minutesOld > staleThresholdMin;
+  const next = { new: 'preparing', preparing: 'ready', ready: 'delivered' }[order.status];
+  const nextLabel = { preparing: 'Start', ready: 'Mark Ready', delivered: 'Mark Delivered' }[next];
+  const total = order.items.reduce((s, i) => s + i.price_at_order * i.quantity, 0);
+  return `
+  <article class="bg-surface-bright border border-on-background/10 rounded-xl p-stack-sm flex flex-col gap-2 shadow-[0_2px_8px_rgba(43,33,28,0.02)] ${stale?'stale border-error/40':''}">
+    <div class="flex items-center justify-between">
+      <span class="font-headline-md text-primary text-[20px] leading-7">Table ${order.table_number}</span>
+      <span class="font-label-sm text-on-surface-variant">${ago(order.created_at)} ago</span>
+    </div>
+    ${stale ? `<span class="font-label-sm text-error flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">schedule</span> Waiting ${Math.floor(minutesOld)} min</span>` : ''}
+    <div class="flex flex-col gap-1 flex-grow">
+      ${order.items.map(i => `
+        <div class="flex items-center justify-between gap-2">
+          <span class="font-body-md text-on-background"><b>${i.quantity}x</b> ${esc(i.item_name)}${i.variant_name ? ` <span class="font-label-sm text-on-surface-variant">(${esc(i.variant_name)})</span>` : ''}</span>
+          <span class="font-label-sm text-on-surface-variant">${rs(i.price_at_order * i.quantity)}</span>
+        </div>`).join('')}
+    </div>
+    <div class="border-t border-outline/10 pt-2 flex items-center justify-between">
+      <span class="font-label-bold text-on-background">${rs(total)}</span>
+      <div class="flex gap-2">
+        ${order.status !== 'new' && order.status !== 'delivered' ? `<button class="font-label-sm px-2 py-1 rounded border border-outline/30 text-on-surface-variant hover:bg-surface-dim" onclick="undo(${JSON.stringify(order).replace(/"/g,'&quot;')})" title="Undo (60s window)">Undo</button>` : ''}
+        ${next ? `<button class="bg-primary text-on-primary font-label-bold px-4 py-2 rounded-lg flex items-center gap-1" onclick="advance(${JSON.stringify(order).replace(/"/g,'&quot;')})">${nextLabel} <span class="material-symbols-outlined text-[16px]">arrow_forward</span></button>` : ''}
+      </div>
+    </div>
+  </article>`;
+}
+
+function render() {
+  document.getElementById('board').innerHTML = COLS.map(col => {
+    const colOrders = orders.filter(o => o.status === col.key);
+    return `
+      <section class="bg-background border border-outline/10 rounded-xl flex flex-col min-h-[200px]">
+        <header class="px-4 py-3 flex items-center gap-2 border-b border-outline/10">
+          <span class="material-symbols-outlined text-[18px] ${col.color.split(' ')[0]}">${col.icon}</span>
+          <h2 class="font-label-bold uppercase tracking-wider text-on-surface-variant">${col.label}</h2>
+          <span class="ml-auto font-label-bold text-on-surface-variant bg-surface-container rounded-full w-6 h-6 flex items-center justify-center text-xs">${colOrders.length}</span>
+        </header>
+        <div class="p-3 flex flex-col gap-3 flex-grow overflow-y-auto hide-scrollbar max-h-[70vh]">
+          ${colOrders.length ? colOrders.map(card).join('') : `<div class="text-center font-label-sm text-on-surface-variant/60 py-8">No orders</div>`}
+        </div>
+      </section>`;
+  }).join('');
+}
+
+async function logout() { await fetch('/api/auth/logout', { method: 'POST' }); location.href = '/login'; }
+init();
+</script>
+</body>
+</html>

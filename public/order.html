@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="theme-color" content="#5c091c"/>
+<title>Amritsari Kulcha — Order at your table</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="/assets/tailwind-config.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Work+Sans:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL@20..48,100..700,0..1&display=swap" rel="stylesheet">
+<style>
+  .hide-scrollbar::-webkit-scrollbar { display: none; }
+  .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .slide-up { animation: slideUp .3s ease-out forwards; }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  body { background: #FBF3E7; }
+</style>
+</head>
+<body class="font-body-md text-on-surface antialiased">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-40 bg-background border-b border-on-surface/10">
+  <div class="flex justify-between items-center px-container-margin py-unit max-w-[640px] mx-auto">
+    <button aria-label="Menu" class="flex items-center text-primary"><span class="material-symbols-outlined">restaurant_menu</span></button>
+    <h1 class="font-display-lg text-headline-lg-mobile text-primary tracking-tight">Amritsari Kulcha</h1>
+    <span class="flex items-center justify-center border border-outline/50 rounded-full px-3 py-1 text-on-surface-variant font-label-sm rotate-[3deg] shadow-[0_2px_4px_rgba(0,0,0,0.05)] bg-surface-bright" id="table-badge"></span>
+  </div>
+</header>
+
+<main class="max-w-[640px] mx-auto pt-[76px] pb-[120px]">
+  <!-- Category pills -->
+  <div class="px-container-margin py-stack-sm overflow-x-auto hide-scrollbar">
+    <div class="flex gap-unit" id="category-pills"></div>
+  </div>
+  <!-- Menu -->
+  <div class="px-container-margin py-stack-md flex flex-col gap-stack-md" id="menu"></div>
+  <!-- Loading / errors -->
+  <div id="state" class="px-container-margin py-stack-lg flex flex-col items-center gap-stack-sm text-center">
+    <div class="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
+    <span class="font-label-sm text-on-surface-variant">Loading the menu…</span>
+  </div>
+</main>
+
+<!-- Cart bar -->
+<div class="cart-bar fixed bottom-0 w-full z-40 rounded-t-xl bg-surface-container-lowest shadow-[0_-4px_12px_rgba(0,0,0,0.05)] border-t border-outline/10 hidden" id="cart-bar">
+  <div class="flex justify-between items-center px-container-margin py-stack-sm max-w-[640px] mx-auto gap-gutter">
+    <div class="flex flex-col">
+      <span class="font-label-bold text-primary" id="cart-count"></span>
+      <span class="font-body-md text-label-sm text-on-surface-variant" id="cart-subtotal"></span>
+    </div>
+    <button class="bg-primary text-secondary-container font-label-bold text-body-md px-6 py-3 rounded-lg flex items-center gap-2 shadow-md" onclick="openSheet()">
+      Review Order <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1">shopping_cart</span>
+    </button>
+  </div>
+</div>
+
+<!-- Review sheet -->
+<div id="sheet-root"></div>
+
+<!-- Success toast -->
+<div id="toast" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-primary text-on-primary font-label-bold px-5 py-3 rounded-lg shadow-lg hidden">Order placed!</div>
+
+<script>
+const state = { menu: null, cart: [], sheetOpen: false };
+const path = location.pathname.match(/^\/b\/([\w-]+)\/(\d+)$/);
+const BRANCH = path[1], TABLE = path[2];
+const API = '/api';
+const rs = (n) => `₹${(n/100).toFixed(2)}`;
+
+document.getElementById('table-badge').textContent = `Table ${TABLE}`;
+
+const $ = (id) => document.getElementById(id);
+
+async function loadMenu() {
+  try {
+    const r = await fetch(`${API}/catalog/menu?branch=${BRANCH}`);
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error?.message);
+    state.menu = j.data;
+    render();
+  } catch (e) {
+    $('state').innerHTML = `
+      <span class="material-symbols-outlined text-[40px] text-error">error</span>
+      <p class="font-headline-md text-error">Something went wrong</p>
+      <p class="font-body-md text-on-surface-variant max-w-xs">Please ask staff for help or scan the QR code again.</p>
+      <button class="mt-4 bg-primary text-on-primary font-label-bold px-6 py-2 rounded-lg" onclick="location.reload()">Try again</button>`;
+  }
+}
+// keep availability fresh per rules.prd.md §8
+setInterval(loadMenu, 30000);
+
+function render() {
+  $('state').innerHTML = '';
+  const m = state.menu;
+  // pills
+  $('category-pills').innerHTML = m.categories.map((c, i) =>
+    `<button data-cat="${c}" onclick="jump('${c}')" class="font-label-bold px-4 py-2 rounded-full whitespace-nowrap transition-colors ${i===0?'bg-primary text-on-primary':'bg-surface-bright border border-outline/20 text-on-surface hover:bg-surface-dim'}">${c}</button>`
+  ).join('');
+  // menu sections
+  $('menu').innerHTML = m.categories.map(cat => {
+    const items = m.items.filter(i => i.category === cat);
+    if (!items.length) return '';
+    return `
+      <section id="cat-${cat}" class="flex flex-col gap-stack-sm">
+        <div class="flex items-center gap-unit mt-stack-md">
+          <h2 class="font-headline-md text-primary">${cat}</h2>
+          <div class="h-px flex-grow bg-outline/20"></div>
+        </div>
+        ${items.map(cardHtml).join('')}
+      </section>`;
+  }).join('');
+}
+
+function jump(cat) { document.getElementById('cat-' + cat)?.scrollIntoView({ behavior: 'smooth' }); }
+
+function cardHtml(item) {
+  const isBest = item.bestseller;
+  return `
+  <article class="flex gap-gutter p-unit bg-surface-bright rounded-lg border border-on-background/10 shadow-[0_2px_8px_rgba(43,33,28,0.02)] relative overflow-hidden">
+    ${isBest ? `<div class="absolute top-2 -right-6 bg-secondary-container text-on-secondary-container font-label-sm text-[10px] px-6 py-0.5 rotate-45 shadow-sm z-10 font-bold uppercase tracking-wider border border-secondary/20">Bestseller</div>` : ''}
+    <div class="w-[100px] h-[100px] rounded-md overflow-hidden flex-shrink-0 relative bg-surface-dim">
+      <div class="w-full h-full flex items-center justify-center text-outline/50"><span class="material-symbols-outlined text-4xl">bakery_dining</span></div>
+      ${item.is_veg ? `<div class="absolute top-1 left-1 bg-surface-bright rounded p-[2px] border border-outline/30"><div class="w-2 h-2 rounded-full bg-veg-green"></div></div>` : ''}
+    </div>
+    <div class="flex flex-col justify-between flex-grow">
+      <div>
+        <h3 class="font-headline-md text-body-lg text-on-background font-semibold ${isBest?'pr-4':''}">${item.name}</h3>
+        <p class="font-body-md text-body-md text-on-surface-variant mt-1 line-clamp-2">${item.description || ''}</p>
+        ${item.variants.length ? `<div class="flex gap-2 mt-2 hide-scrollbar overflow-x-auto" id="variants-${item.id}">${variantChips(item)}</div>` : ''}
+      </div>
+      <div class="flex justify-between items-center mt-stack-sm">
+        <span class="font-label-bold text-on-background">${rs(item.base_price)}</span>
+        <div id="ctl-${item.id}">${addButton(item.id)}</div>
+      </div>
+    </div>
+  </article>`;
+}
+
+let selectedVariant = {};
+function variantChips(item) {
+  return item.variants.map((v, i) =>
+    `<button data-vi="${v.id}" onclick="pickVariant('${item.id}','${v.id}',${v.priceDelta})" class="font-label-sm px-2.5 py-1 rounded border transition-colors ${i===0?'border-primary text-primary bg-primary/5':'border-outline/30 text-on-surface-variant'} whitespace-nowrap">${v.name}${v.priceDelta?' +'+rs(v.priceDelta):''}</button>`
+  ).join('');
+}
+function pickVariant(itemId, variantId, delta) {
+  selectedVariant[itemId] = { variantId, delta };
+  document.querySelectorAll(`#variants-${itemId} button`).forEach(b => {
+    const active = b.dataset.vi === variantId;
+    b.className = `font-label-sm px-2.5 py-1 rounded border whitespace-nowrap ${active?'border-primary text-primary bg-primary/5':'border-outline/30 text-on-surface-variant'}`;
+  });
+}
+
+function addButton(itemId) {
+  return `<button onclick="add('${itemId}')" class="bg-primary text-on-primary font-label-bold text-label-sm px-4 py-1.5 rounded h-8 hover:opacity-90 transition-opacity">Add to order</button>`;
+}
+function stepper(itemId, qty) {
+  return `<div class="flex items-center border border-primary rounded bg-surface-bright overflow-hidden h-8">
+    <button class="px-2 text-primary hover:bg-primary/10 h-full flex items-center" onclick="dec('${itemId}')"><span class="material-symbols-outlined text-[18px]">remove</span></button>
+    <span class="font-label-bold text-primary px-2">${qty}</span>
+    <button class="px-2 text-primary hover:bg-primary/10 h-full flex items-center" onclick="inc('${itemId}')"><span class="material-symbols-outlined text-[18px]">add</span></button>
+  </div>`;
+}
+
+function cartEntry(itemId) {
+  const item = state.menu.items.find(i => i.id === itemId);
+  const v = selectedVariant[itemId] || {};
+  const key = itemId + '|' + (v.variantId || '');
+  return { item, variantId: v.variantId || null, variantName: v.variantName || item.variants[0]?.name, qty: 1, key };
+}
+function qtyOf(itemId) {
+  const v = selectedVariant[itemId] || {};
+  const key = itemId + '|' + (v.variantId || '');
+  return state.cart.find(c => c.key === key)?.qty || 0;
+}
+function findIdx(itemId) {
+  const v = selectedVariant[itemId] || {};
+  const key = itemId + '|' + (v.variantId || '');
+  return state.cart.findIndex(c => c.key === key);
+}
+function add(itemId) {
+  const v = selectedVariant[itemId];
+  const item = state.menu.items.find(i => i.id === itemId);
+  const idx = findIdx(itemId);
+  if (idx >= 0) { state.cart[idx].qty++; } else {
+    state.cart.push({ item, variantId: v?.variantId || null, variantName: v ? item.variants.find(x => x.id === v.variantId)?.name : item.variants[0]?.name || null, qty: 1, key: itemId + '|' + (v?.variantId || '') });
+  }
+  refreshCart();
+}
+function inc(itemId) { const i = findIdx(itemId); state.cart[i].qty++; refreshCart(); }
+function dec(itemId) {
+  const i = findIdx(itemId);
+  state.cart[i].qty--;
+  if (state.cart[i].qty <= 0) state.cart.splice(i, 1);
+  refreshCart();
+}
+function refreshCart() {
+  const count = state.cart.reduce((s, c) => s + c.qty, 0);
+  const subtotal = state.cart.reduce((s, c) => s + c.qty * c.item.base_price, 0);
+  $('cart-count').textContent = `${count} Item${count!==1?'s':''} added`;
+  $('cart-subtotal').textContent = `${rs(subtotal)} plus taxes`;
+  $('cart-bar').classList.toggle('hidden', count === 0);
+  // refresh steppers
+  state.menu.items.forEach(it => {
+    const q = qtyOf(it.id);
+    $('ctl-' + it.id).innerHTML = q > 0 ? stepper(it.id, q) : addButton(it.id);
+  });
+  if (state.sheetOpen) renderSheet();
+}
+
+function openSheet() { state.sheetOpen = true; renderSheet(); }
+function closeSheet() { state.sheetOpen = false; $('sheet-root').innerHTML = ''; }
+function renderSheet() {
+  const subtotal = state.cart.reduce((s, c) => s + c.qty * c.item.basePrice, 0);
+  const gst = Math.round(subtotal * 5 / 100);
+  const charges = 1500;
+  const total = subtotal + gst + charges;
+  $('sheet-root').innerHTML = `
+  <div class="fixed inset-0 bg-on-background/40 z-40" onclick="closeSheet()"></div>
+  <div class="slide-up fixed bottom-0 left-0 right-0 max-w-[640px] mx-auto bg-background-cream rounded-t-[32px] shadow-[0_-8px_30px_rgba(0,0,0,0.12)] z-50 flex flex-col max-h-[85vh]">
+    <div class="pt-unit pb-stack-sm flex flex-col items-center bg-background-cream rounded-t-[32px]">
+      <div class="w-12 h-1 bg-outline/30 rounded-full mb-stack-sm"></div>
+      <div class="w-full flex justify-between items-center px-container-margin">
+        <h1 class="font-headline-lg-mobile text-on-background">Your Order</h1>
+        <button class="w-10 h-10 flex items-center justify-center rounded-full bg-surface-container hover:bg-surface-container-high text-on-surface" onclick="closeSheet()"><span class="material-symbols-outlined">close</span></button>
+      </div>
+      <div class="w-full h-px bg-outline/10 mt-stack-md"></div>
+    </div>
+    <div class="flex-1 overflow-y-auto px-container-margin py-stack-md flex flex-col gap-stack-lg">
+      <div class="flex flex-col gap-stack-md">
+        ${state.cart.map(c => `
+          <div class="flex justify-between items-start">
+            <div class="flex gap-gutter">
+              <div class="w-8 h-8 rounded border border-outline/20 flex items-center justify-center bg-surface-bright font-label-bold text-primary flex-shrink-0">${c.qty}x</div>
+              <div class="flex flex-col">
+                <span class="font-headline-md text-[20px] leading-[28px] text-on-background font-semibold">${c.item.name}</span>
+                ${c.variantName ? `<span class="font-label-sm text-on-surface-variant mt-1">${c.variantName}</span>` : ''}
+                <div class="flex items-center gap-2 mt-2">
+                  <button class="text-primary" onclick="dec('${c.item.id}')"><span class="material-symbols-outlined text-[18px]">remove</span></button>
+                  <span class="font-label-bold text-primary">${c.qty}</span>
+                  <button class="text-primary" onclick="inc('${c.item.id}')"><span class="material-symbols-outlined text-[18px]">add</span></button>
+                </div>
+              </div>
+            </div>
+            <span class="font-body-md font-medium text-on-background pl-gutter">${rs(c.qty * c.item.basePrice)}</span>
+          </div>`).join('')}
+        <button class="flex items-center gap-2 text-primary font-label-bold w-fit mt-stack-sm hover:opacity-80" onclick="closeSheet()"><span class="material-symbols-outlined text-[18px]">add</span> Add more items</button>
+      </div>
+      <div class="bg-surface-bright border border-outline/10 p-stack-md rounded-xl flex flex-col gap-stack-sm relative overflow-hidden">
+        <div class="absolute -right-8 -bottom-8 w-32 h-32 rounded-full border-4 border-outline/5 flex items-center justify-center rotate-12 pointer-events-none">
+          <span class="font-display-lg text-[40px] text-outline/5 opacity-50">AK</span>
+        </div>
+        <div class="flex justify-between font-body-md text-on-surface-variant z-10"><span>Subtotal</span><span>${rs(subtotal)}</span></div>
+        <div class="flex justify-between font-body-md text-on-surface-variant z-10"><span>GST (5%)</span><span>${rs(gst)}</span></div>
+        <div class="flex justify-between font-body-md text-on-surface-variant z-10"><span>Restaurant Charges</span><span>${rs(charges)}</span></div>
+        <div class="w-full border-b border-dashed border-outline/30 my-unit z-10"></div>
+        <div class="flex justify-between items-end z-10">
+          <span class="font-headline-md text-on-background">Total</span>
+          <span class="font-headline-lg-mobile text-primary">${rs(total)}</span>
+        </div>
+      </div>
+      <div class="flex items-center justify-center gap-2 text-on-surface-variant font-label-sm pb-stack-lg">
+        <span class="material-symbols-outlined text-[16px] text-secondary">local_fire_department</span>
+        <span class="italic font-body-lg text-[14px]">Your order goes directly to our tandoor.</span>
+      </div>
+    </div>
+    <div class="sticky bottom-0 bg-background-cream/95 backdrop-blur-md px-container-margin py-stack-md border-t border-outline/10 pb-[calc(24px+env(safe-area-inset-bottom))]">
+      <button class="w-full bg-primary hover:bg-primary-container text-on-primary font-label-bold py-[18px] rounded flex items-center justify-center gap-3 shadow-sm" onclick="placeOrder()" id="place-btn">
+        <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1">restaurant</span> Place Order
+      </button>
+    </div>
+  </div>`;
+}
+
+async function placeOrder() {
+  const btn = $('place-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="w-5 h-5 border-2 border-on-primary border-t-transparent rounded-full animate-spin"></span> Placing…';
+  try {
+    const r = await fetch('/api/orders', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ branch: BRANCH, tableNumber: Number(TABLE), items: state.cart.map(c => ({ itemId: c.item.id, quantity: c.qty, variantId: c.variantId })) })
+    });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error?.message);
+    showToast('Order placed! It’s on its way to the kitchen.');
+    state.cart = []; state.sheetOpen = false; $('sheet-root').innerHTML = ''; refreshCart();
+  } catch (e) {
+    showToast(e.message, true);
+    btn.disabled = false; btn.innerHTML = '<span class="material-symbols-outlined" style="font-variation-settings:\'FILL\' 1">restaurant</span> Place Order';
+  }
+}
+
+function showToast(msg, isError = false) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = `fixed top-20 left-1/2 -translate-x-1/2 z-50 font-label-bold px-5 py-3 rounded-lg shadow-lg ${isError ? 'bg-error text-on-error' : 'bg-primary text-on-primary'}`;
+  setTimeout(() => t.classList.add('hidden'), 4000);
+}
+
+loadMenu();
+</script>
+</body>
+</html>

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="theme-color" content="#5c091c"/>
+<title>Admin — Amritsari Kulcha</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="/assets/tailwind-config.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght@20..48,100..700,0..1&display=swap" rel="stylesheet">
+</head>
+<body class="bg-background-cream font-body-md text-on-surface antialiased min-h-screen">
+<header class="sticky top-0 z-30 bg-background border-b border-on-surface/10">
+  <div class="flex items-center justify-between px-container-margin py-unit max-w-[1200px] mx-auto">
+    <div class="flex items-center gap-3">
+      <span class="material-symbols-outlined text-primary">admin_panel_settings</span>
+      <h1 class="font-headline-md text-primary">Owner / Admin</h1>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="/tables-qr" class="font-label-sm px-3 py-1.5 rounded-lg border border-outline/30 text-on-surface-variant hover:bg-surface-dim flex items-center gap-1" title="Table QR codes"><span class="material-symbols-outlined text-[16px]">qr_code_2</span></a>
+      <button class="font-label-sm px-3 py-1.5 rounded-lg border border-outline/30 text-on-surface-variant hover:bg-surface-dim" onclick="logout()">Log out</button>
+    </div>
+  </div>
+</header>
+
+<nav class="max-w-[1200px] mx-auto px-container-margin pt-4 flex gap-2">
+  <button class="nav-btn font-label-bold px-4 py-2 rounded-full bg-primary text-on-primary" data-tab="revenue" onclick="tab('revenue',this)">Revenue</button>
+  <button class="nav-btn font-label-bold px-4 py-2 rounded-full bg-surface-bright border border-outline/20 text-on-surface" data-tab="menu" onclick="tab('menu',this)">Menu & Pricing</button>
+  <button class="nav-btn font-label-bold px-4 py-2 rounded-full bg-surface-bright border border-outline/20 text-on-surface" data-tab="settings" onclick="tab('settings',this)">Tax & Charges</button>
+</nav>
+
+<main class="max-w-[1200px] mx-auto px-container-margin py-stack-md">
+  <section id="tab-revenue">
+    <div class="flex gap-2 mb-4">
+      ${['day','week','month'].map(p => `<button class="per-btn font-label-bold px-4 py-2 rounded-full border ${p==='week'?'bg-primary text-on-primary border-primary':'bg-surface-bright border-outline/20 text-on-surface'}" data-p="${p}" onclick="loadRevenue('${p}')">${p==='day'?'Today':p==='week'?'Last 7 days':'Last 30 days'}</button>`).join('')}
+    </div>
+    <div id="revenue-cards" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"></div>
+    <div class="bg-surface-bright border border-on-background/10 rounded-xl overflow-hidden">
+      <table class="w-full">
+        <thead class="bg-surface-container font-label-bold text-on-surface-variant uppercase tracking-wider text-xs">
+          <tr><th class="text-left px-4 py-3">Branch</th><th class="text-right px-4 py-3">Bills paid</th><th class="text-right px-4 py-3">Revenue</th></tr>
+        </thead>
+        <tbody id="revenue-rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="tab-menu" class="hidden">
+    <div class="bg-surface-bright border border-on-background/10 rounded-xl overflow-hidden">
+      <table class="w-full">
+        <thead class="bg-surface-container font-label-bold text-on-surface-variant uppercase tracking-wider text-xs">
+          <tr><th class="text-left px-4 py-3">Item</th><th class="text-left px-4 py-3">Category</th><th class="text-right px-4 py-3">Price (₹)</th><th class="text-center px-4 py-3">Available</th></tr>
+        </thead>
+        <tbody id="menu-rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="tab-settings" class="hidden max-w-[480px]">
+    <div class="bg-surface-bright border border-on-background/10 rounded-xl p-4 flex flex-col gap-4">
+      <div>
+        <label class="font-label-bold text-on-surface">GST rate (%)</label>
+        <input id="cfg-tax" type="number" step="0.1" min="0" class="mt-1 w-full px-4 py-3 border border-outline rounded-lg font-body-md focus:border-primary outline-none">
+      </div>
+      <div>
+        <label class="font-label-bold text-on-surface">Restaurant charge (₹)</label>
+        <input id="cfg-charge" type="number" step="1" min="0" class="mt-1 w-full px-4 py-3 border border-outline rounded-lg font-body-md focus:border-primary outline-none">
+      </div>
+      <p id="cfg-msg" class="font-label-sm text-veg-green hidden">Saved. Applies to new bills only.</p>
+      <button class="bg-primary text-on-primary font-label-bold py-3 rounded-lg" onclick="saveConfig()">Save settings</button>
+    </div>
+  </section>
+</main>
+
+<script>
+const rs = n => `₹${(n/100).toFixed(2)}`;
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let menuItems = [];
+
+async function init() {
+  const me = await fetch('/api/auth/me').then(r => r.json());
+  if (!me.success || me.data.role !== 'admin') return location.href = '/login';
+  loadRevenue('week');
+  loadConfig();
+}
+function tab(name, btn) {
+  ['revenue','menu','settings'].forEach(t => document.getElementById('tab-' + t).classList.toggle('hidden', t !== name));
+  document.querySelectorAll('.nav-btn').forEach(b => b.className = b === btn
+    ? 'nav-btn font-label-bold px-4 py-2 rounded-full bg-primary text-on-primary'
+    : 'nav-btn font-label-bold px-4 py-2 rounded-full bg-surface-bright border border-outline/20 text-on-surface');
+  if (name === 'menu') loadMenu();
+}
+
+async function loadRevenue(period) {
+  document.querySelectorAll('.per-btn').forEach(b => b.className = b.dataset.p === period
+    ? 'per-btn font-label-bold px-4 py-2 rounded-full bg-primary text-on-primary border border-primary'
+    : 'per-btn font-label-bold px-4 py-2 rounded-full bg-surface-bright border border-outline/20 text-on-surface');
+  const r = await fetch(`/api/admin/revenue?period=${period}`).then(x => x.json());
+  if (!r.success) return;
+  const d = r.data;
+  const tot = d.byBranch.reduce((s, b) => s + b.revenue, 0);
+  document.getElementById('revenue-cards').innerHTML = `
+    <div class="bg-surface-bright border border-on-background/10 rounded-xl p-4"><p class="font-label-sm text-on-surface-variant">Revenue (${d.since})</p><p class="font-headline-md text-primary text-2xl mt-1">${rs(tot)}</p></div>
+    <div class="bg-surface-bright border border-on-background/10 rounded-xl p-4"><p class="font-label-sm text-on-surface-variant">Bills paid</p><p class="font-headline-md text-primary text-2xl mt-1">${d.totalOrders}</p></div>
+    <div class="bg-surface-bright border border-on-background/10 rounded-xl p-4"><p class="font-label-sm text-on-surface-variant">Branches</p><p class="font-headline-md text-primary text-2xl mt-1">${d.byBranch.length}/4</p></div>`;
+  document.getElementById('revenue-rows').innerHTML = d.byBranch.length
+    ? d.byBranch.map(b => `<tr class="border-t border-outline/10"><td class="px-4 py-3 font-headline-md text-on-background text-lg">${esc(b.branch_name)}</td><td class="px-4 py-3 text-right">${b.bill_count}</td><td class="px-4 py-3 text-right font-label-bold text-on-background">${rs(b.revenue)}</td></tr>`).join('')
+    : '<tr><td colspan="3" class="px-4 py-8 text-center font-label-sm text-on-surface-variant/60">No paid bills in this period yet</td></tr>';
+}
+
+async function loadMenu() {
+  const r = await fetch('/api/catalog/menu?branch=alkapuri').then(x => x.json());
+  if (!r.success) return;
+  menuItems = r.data.items;
+  document.getElementById('menu-rows').innerHTML = menuItems.map(it => `
+    <tr class="border-t border-outline/10">
+      <td class="px-4 py-3"><span class="font-headline-md text-on-background text-lg">${esc(it.name)}</span><p class="font-label-sm text-on-surface-variant">${esc(it.description || '')}</p></td>
+      <td class="px-4 py-3 font-label-sm text-on-surface-variant">${esc(it.category)}</td>
+      <td class="px-4 py-3 text-right"><input data-id="${it.id}" type="number" step="1" value="${it.base_price/100}" class="price-inp w-24 px-2 py-1.5 border border-outline/40 rounded-lg text-right font-body-md focus:border-primary outline-none" onchange="updatePrice(this)"></td>
+      <td class="px-4 py-3 text-center"><button data-id="${it.id}" class="avl-btn px-3 py-1.5 rounded-lg font-label-bold ${it.available ? 'bg-veg-green/10 text-veg-green' : 'bg-error-container text-on-error-container'}" onclick="toggleAvail(this)">${it.available ? 'On' : 'Off'}</button></td>
+    </tr>`).join('');
+}
+
+async function updatePrice(input) {
+  const r = await fetch('/api/admin/menu', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ itemId: input.dataset.id, price: Math.round(Number(input.value) * 100) })
+  });
+  const j = await r.json();
+  if (!j.success) alert(j.error.message);
+}
+async function toggleAvail(btn) {
+  const item = menuItems.find(i => i.id === btn.dataset.id);
+  const r = await fetch('/api/admin/menu', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ itemId: btn.dataset.id, available: item.available ? 0 : 1 })
+  });
+  const j = await r.json();
+  if (!j.success) return alert(j.error.message);
+  item.available = j.data.available;
+  btn.className = j.data.available ? 'avl-btn px-3 py-1.5 rounded-lg font-label-bold bg-veg-green/10 text-veg-green' : 'avl-btn px-3 py-1.5 rounded-lg font-label-bold bg-error-container text-on-error-container';
+  btn.textContent = j.data.available ? 'On' : 'Off';
+}
+
+async function loadConfig() {
+  const r = await fetch('/api/admin/config').then(x => x.json());
+  if (r.success) { document.getElementById('cfg-tax').value = r.data.taxRate; document.getElementById('cfg-charge').value = r.data.serviceCharge / 100; }
+}
+async function saveConfig() {
+  const r = await fetch('/api/admin/config', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taxRate: Number(document.getElementById('cfg-tax').value), serviceCharge: Math.round(Number(document.getElementById('cfg-charge').value) * 100) })
+  });
+  const j = await r.json();
+  if (!j.success) return alert(j.error.message);
+  const m = document.getElementById('cfg-msg');
+  m.classList.remove('hidden');
+  setTimeout(() => m.classList.add('hidden'), 3000);
+}
+
+async function logout() { await fetch('/api/auth/logout', { method: 'POST' }); location.href = '/login'; }
+init();
+</script>
+</body>
+</html>

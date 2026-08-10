@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="theme-color" content="#5c091c"/>
+<title>Reception — Amritsari Kulcha</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="/assets/tailwind-config.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght@20..48,100..700,0..1&display=swap" rel="stylesheet">
+<style>.hide-scrollbar::-webkit-scrollbar{display:none}.hide-scrollbar{scrollbar-width:none}</style>
+</head>
+<body class="bg-background-cream font-body-md text-on-surface antialiased min-h-screen">
+<header class="sticky top-0 z-30 bg-background border-b border-on-surface/10">
+  <div class="flex items-center justify-between px-container-margin py-unit max-w-[1200px] mx-auto">
+    <div class="flex items-center gap-3">
+      <span class="material-symbols-outlined text-primary">point_of_sale</span>
+      <h1 class="font-headline-md text-primary">Reception <span class="font-body-md text-on-surface-variant" id="branch-name"></span></h1>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="/tables-qr" class="font-label-sm px-3 py-1.5 rounded-lg border border-outline/30 text-on-surface-variant hover:bg-surface-dim flex items-center gap-1" title="Table QR codes"><span class="material-symbols-outlined text-[16px]">qr_code_2</span></a>
+      <button class="font-label-sm px-3 py-1.5 rounded-lg border border-outline/30 text-on-surface-variant hover:bg-surface-dim" onclick="logout()">Log out</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-[1200px] mx-auto px-container-margin py-stack-md">
+  <div id="tables" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3"></div>
+</main>
+
+<!-- Bill drawer -->
+<div id="drawer-root"></div>
+
+<script>
+let session = null, tables = [];
+const rs = n => `₹${(n/100).toFixed(2)}`;
+
+async function init() {
+  const me = await fetch('/api/auth/me').then(r => r.json());
+  if (!me.success) return location.href = '/login';
+  session = me.data;
+  document.getElementById('branch-name').textContent = `· ${session.branchId}`;
+  connect();
+  await loadTables();
+  setInterval(loadTables, 10000);
+}
+async function loadTables() {
+  const r = await fetch(`/api/tables?branch=${session.branchId}`).then(x => x.json());
+  if (r.success) { tables = r.data; renderTables(); }
+}
+function connect() {
+  const es = new EventSource(`/api/events?branch=${session.branchId}`);
+  es.addEventListener('table_updated', () => loadTables());
+  es.addEventListener('bill_updated', () => loadTables());
+  es.addEventListener('order_created', () => loadTables());
+}
+
+function tableCard(t) {
+  const cls = t.status === 'occupied'
+    ? 'border-primary/40 bg-primary/5 text-primary'
+    : t.locked
+      ? 'border-secondary/50 bg-secondary/5 text-secondary'
+      : 'border-outline/20 bg-surface-bright text-on-background';
+  const badge = t.status === 'occupied'
+    ? `<span class="font-label-sm text-primary">${t.activeOrderCount} active order${t.activeOrderCount!==1?'s':''}</span>`
+    : t.locked
+      ? `<span class="font-label-sm text-secondary flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">receipt_long</span> Bill pending</span>`
+      : `<span class="font-label-sm text-on-surface-variant/60">Available</span>`;
+  return `
+  <button onclick="openTable(${JSON.stringify(t).replace(/"/g,'&quot;')})"
+    class="border rounded-xl p-4 flex flex-col items-center gap-1 transition-all hover:shadow-md ${cls}">
+    <span class="material-symbols-outlined text-[22px]">table_restaurant</span>
+    <span class="font-headline-md text-[22px] leading-7">${t.table_number}</span>
+    ${badge}
+  </button>`;
+}
+function renderTables() {
+  document.getElementById('tables').innerHTML = tables.map(tableCard).join('');
+}
+
+function openTable(t) {
+  document.getElementById('drawer-root').innerHTML = `
+  <div class="fixed inset-0 bg-on-background/40 z-40" onclick="closeDrawer()"></div>
+  <div class="slide-up fixed bottom-0 left-0 right-0 max-w-[720px] mx-auto bg-background-cream rounded-t-[24px] shadow-xl z-50 flex flex-col max-h-[90vh]">
+    <div class="p-4 flex items-center justify-between border-b border-outline/10">
+      <h2 class="font-headline-md text-primary">Table ${t.table_number} <span class="font-body-md text-on-surface-variant">· ${session.branchId}</span></h2>
+      <button class="w-10 h-10 flex items-center justify-center rounded-full bg-surface-container" onclick="closeDrawer()"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="flex-1 overflow-y-auto p-4" id="table-detail"></div>
+    <div class="sticky bottom-0 bg-background-cream/95 border-t border-outline/10 p-4 flex gap-2" id="table-actions"></div>
+  </div>`;
+  const overlay = document.querySelector('#drawer-root > div.fixed');
+  overlay.classList.remove('slide-up');
+  loadTableDetail(t);
+}
+
+async function loadTableDetail(t) {
+  const orders = (await fetch(`/api/orders?branch=${session.branchId}`).then(x => x.json())).data
+    .filter(o => o.table_id === t.id && o.status !== 'delivered' && o.status !== 'new');
+  const delivered = (await fetch(`/api/orders?branch=${session.branchId}`).then(x => x.json())).data
+    .filter(o => o.table_id === t.id && o.status === 'delivered');
+
+  // pending bill
+  const pending = t.pendingBills && t.pendingBills[0];
+
+  const el = document.getElementById('table-detail');
+  if (pending) { renderBillView(pending.id, t); return; }
+
+  const mk = (o) => `
+    <div class="bg-surface-bright border border-on-background/10 rounded-lg p-3">
+      <div class="flex justify-between">
+        <span class="font-label-bold text-on-surface-variant">${o.status} · ${o.created_at}</span>
+        <span class="font-label-sm text-on-surface-variant">${o.id.slice(-6)}</span>
+      </div>
+      ${o.items.map(i => `<div class="flex justify-between mt-1"><span>${i.quantity}x ${i.item_name}</span><span class="font-label-sm">${rs(i.price_at_order*i.quantity)}</span></div>`).join('')}
+    </div>`;
+  el.innerHTML = `
+    <h3 class="font-label-bold uppercase tracking-wider text-on-surface-variant mb-2">In progress</h3>
+    <div class="flex flex-col gap-3 mb-4">${orders.length ? orders.map(mk).join('') : '<p class="font-label-sm text-on-surface-variant/60">No active orders</p>'}</div>
+    <h3 class="font-label-bold uppercase tracking-wider text-on-surface-variant mb-2">Delivered (ready to bill)</h3>
+    <div class="flex flex-col gap-3">${delivered.length ? delivered.map(mk).join('') : '<p class="font-label-sm text-on-surface-variant/60">Nothing delivered yet</p>'}</div>`;
+
+  document.getElementById('table-actions').innerHTML = `
+    ${delivered.length ? `<button class="flex-1 bg-primary text-on-primary font-label-bold py-3 rounded-lg" onclick="generateBill('${t.id}')">Generate Bill <span class="material-symbols-outlined text-[18px]">receipt_long</span></button>` : ''}
+    <button class="flex-1 border border-outline/30 text-on-surface-variant font-label-bold py-3 rounded-lg" onclick="closeDrawer()">Close</button>`;
+}
+
+async function generateBill(tableId) {
+  const r = await fetch('/api/bills/generate', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tableId })
+  });
+  const j = await r.json();
+  if (!j.success) return alert(j.error.message);
+  renderBillView(j.data.id);
+  loadTables();
+}
+
+async function renderBillView(billId, t) {
+  const r = await fetch(`/api/bills/${billId}`).then(x => x.json());
+  if (!r.success) return alert(r.error.message);
+  const bill = r.data;
+  const el = document.getElementById('table-detail');
+  const paid = bill.payment_status === 'paid';
+  el.innerHTML = `
+    <div class="bg-surface-bright border border-outline/10 rounded-xl p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-headline-md text-primary">Bill #${bill.id.slice(-8)}</h3>
+        <span class="font-label-bold px-3 py-1 rounded-full ${paid ? 'bg-veg-green/10 text-veg-green' : 'bg-secondary-container text-on-secondary-container'}">${paid ? 'PAID · ' + (bill.payment_method||'').toUpperCase() : 'PENDING'}</span>
+      </div>
+      <p class="font-label-sm text-on-surface-variant mb-2">Table ${bill.table_number} · ${bill.branch_name} · ${bill.created_at}</p>
+      <div class="flex flex-col gap-1.5">
+        ${bill.lines.map(l => `<div class="flex justify-between"><span>${l.quantity}x ${l.name}</span><span>${rs(l.price_at_order*l.quantity)}</span></div>`).join('')}
+      </div>
+      <div class="border-t border-dashed border-outline/30 my-3 pt-2 flex flex-col gap-1 font-body-md text-on-surface-variant">
+        <div class="flex justify-between"><span>Subtotal</span><span>${rs(bill.subtotal)}</span></div>
+        <div class="flex justify-between"><span>GST (${bill.tax_rate_snapshot}%)</span><span>${rs(bill.tax_amount)}</span></div>
+        <div class="flex justify-between"><span>Restaurant charges</span><span>${rs(bill.service_charge)}</span></div>
+        <div class="flex justify-between font-headline-md text-on-background text-lg mt-1"><span>Total</span><span>${rs(bill.total)}</span></div>
+      </div>
+      ${bill.notif_failed ? `<p class="font-label-sm text-error flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">warning</span> Invoice could not be sent by WhatsApp — share manually.</p>` : ''}
+      ${bill.customer_phone && paid ? `<p class="font-label-sm text-on-surface-variant mt-1">Invoice sent to ${bill.customer_phone}</p>` : ''}
+    </div>`;
+
+  const actions = document.getElementById('table-actions');
+  if (paid) {
+    actions.innerHTML = `<button class="flex-1 bg-primary text-on-primary font-label-bold py-3 rounded-lg" onclick="closeDrawer()">Done</button>`;
+  } else {
+    actions.innerHTML = `
+      <div class="flex-1 flex flex-col gap-2">
+        <input id="phone" class="px-4 py-3 border border-outline rounded-lg font-body-md focus:border-primary outline-none" placeholder="Customer phone (for WhatsApp invoice)">
+        <div class="flex gap-2">
+          <button class="flex-1 bg-veg-green text-white font-label-bold py-2.5 rounded-lg" onclick="pay('${bill.id}','cash')">Cash</button>
+          <button class="flex-1 bg-primary text-on-primary font-label-bold py-2.5 rounded-lg" onclick="pay('${bill.id}','upi')">UPI</button>
+          <button class="flex-1 bg-secondary text-white font-label-bold py-2.5 rounded-lg" onclick="pay('${bill.id}','card')">Card</button>
+        </div>
+      </div>`;
+  }
+}
+
+async function pay(billId, method) {
+  const phone = document.getElementById('phone').value.trim();
+  const r = await fetch(`/api/bills/${billId}/pay`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ method, customerPhone: phone })
+  });
+  const j = await r.json();
+  if (!j.success) return alert(j.error.message);
+  renderBillView(billId);
+  loadTables();
+}
+
+function closeDrawer() { document.getElementById('drawer-root').innerHTML = ''; }
+async function logout() { await fetch('/api/auth/logout', { method: 'POST' }); location.href = '/login'; }
+init();
+</script>
+</body>
+</html>

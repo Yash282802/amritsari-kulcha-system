@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Table QR Codes — Amritsari Kulcha</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="/assets/tailwind-config.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght@20..48,100..700,0..1&display=swap" rel="stylesheet">
+<style>
+  @media print {
+    .no-print { display: none !important; }
+    body { background: white; }
+    .qr-card { break-inside: avoid; border: 1px dashed #ccc; }
+  }
+</style>
+</head>
+<body class="bg-background-cream font-body-md text-on-surface antialiased min-h-screen">
+<header class="sticky top-0 z-30 bg-background border-b border-on-surface/10 no-print">
+  <div class="flex items-center justify-between px-container-margin py-unit max-w-[1100px] mx-auto">
+    <div class="flex items-center gap-3">
+      <span class="material-symbols-outlined text-primary">qr_code_2</span>
+      <h1 class="font-headline-md text-primary">Table QR Codes</h1>
+    </div>
+    <div class="flex items-center gap-2">
+      <button class="font-label-sm px-3 py-1.5 rounded-lg bg-primary text-on-primary" onclick="window.print()">Print</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-[1100px] mx-auto px-container-margin py-stack-md">
+  <div class="no-print flex items-center gap-3 mb-4">
+    <span class="font-label-bold text-on-surface-variant">Branch:</span>
+    <select id="branch-sel" class="font-label-bold px-3 py-2 rounded-lg border border-outline/30 bg-surface-bright focus:border-primary outline-none" onchange="load()"></select>
+    <p class="font-label-sm text-on-surface-variant">Scan a code from a phone to open the ordering page for that table. Orders land in the same branch's kitchen & reception screens.</p>
+  </div>
+  <div id="grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4"></div>
+</main>
+
+<script>
+const BRANCHES = ['alkapuri', 'nizampura', 'old-chhani-road', 'gorwa'];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+document.getElementById('branch-sel').innerHTML = BRANCHES.map(b => `<option value="${b}">${b}</option>`).join('');
+
+async function load() {
+  const branch = document.getElementById('branch-sel').value;
+  const r = await fetch(`/api/tables/numbers?branch=${branch}`).then(x => x.json());
+  if (!r.success) return;
+  const isLocal = ['localhost', '127.0.0.1'].some(x => location.hostname.startsWith(x));
+  const base = isLocal
+    ? 'http://' + (await fetch('/api/host').then(x => x.json()).catch(() => ({ host: location.host }))).host
+    : location.origin;
+  document.getElementById('grid').innerHTML = r.data.tables.map(n => {
+    const url = `${base}/b/${branch}/${n}`;
+    const qr = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(url)}`;
+    return `
+    <div class="qr-card bg-white border border-on-background/10 rounded-xl p-4 flex flex-col items-center gap-2 text-center">
+      <img src="${qr}" alt="QR for Table ${n}" width="240" height="240" class="rounded-lg">
+      <span class="font-headline-md text-primary text-xl">Table ${n}</span>
+      <span class="font-label-sm text-on-surface-variant break-all">${esc(url)}</span>
+      <button class="no-print font-label-bold px-4 py-1.5 rounded-lg border border-primary text-primary hover:bg-primary/5" onclick="copy('${esc(url)}')">Copy link</button>
+    </div>`;
+  }).join('');
+}
+
+function copy(url) { navigator.clipboard?.writeText(url); alert('Copied: ' + url); }
+load();
+</script>
+</body>
+</html>
