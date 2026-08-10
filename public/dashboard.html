@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="theme-color" content="#5c091c"/>
+<title>Dashboard — Amritsari Kulcha</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="/assets/tailwind-config.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght@20..48,100..700,0..1&display=swap" rel="stylesheet">
+</head>
+<body class="bg-background-cream font-body-md text-on-surface antialiased min-h-screen">
+<header class="sticky top-0 z-30 bg-background border-b border-on-surface/10">
+  <div class="flex items-center justify-between px-container-margin py-unit max-w-[1200px] mx-auto">
+    <div class="flex items-center gap-3">
+      <span class="material-symbols-outlined text-primary">dashboard</span>
+      <h1 class="font-headline-md text-primary">Dashboard <span class="font-body-md text-on-surface-variant" id="scope"></span></h1>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="/tables-qr" class="font-label-sm px-3 py-1.5 rounded-lg border border-outline/30 text-on-surface-variant hover:bg-surface-dim flex items-center gap-1" title="Table QR codes"><span class="material-symbols-outlined text-[16px]">qr_code_2</span></a>
+      <button class="font-label-sm px-3 py-1.5 rounded-lg border border-outline/30 text-on-surface-variant hover:bg-surface-dim" onclick="logout()">Log out</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-[1200px] mx-auto px-container-margin py-stack-md">
+  <div id="revenue" class="hidden bg-surface-bright border border-on-background/10 rounded-xl p-4 mb-4 flex items-center justify-between"></div>
+  <div id="grid" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
+</main>
+
+<script>
+let session = null;
+const BRANCHES = ['alkapuri', 'nizampura', 'old-chhani-road', 'gorwa'];
+const rs = n => `₹${(n/100).toFixed(0)}`;
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const COLORS = {
+  new: 'text-primary border-primary/30 bg-primary/5',
+  preparing: 'text-secondary border-secondary/30 bg-secondary/5',
+  ready: 'text-veg-green border-veg-green/30 bg-veg-green/5',
+};
+
+async function init() {
+  const me = await fetch('/api/auth/me').then(r => r.json());
+  if (!me.success) return location.href = '/login';
+  session = me.data;
+  document.getElementById('scope').textContent = session.role === 'admin' ? '· All branches' : `· ${session.branchId}`;
+  const branches = session.role === 'admin' ? BRANCHES : [session.branchId];
+  window.branches = branches;
+  document.getElementById('grid').innerHTML = branches.map(b => `
+    <section id="branch-${b}" class="bg-surface-bright border border-on-background/10 rounded-xl">
+      <header class="px-4 py-3 border-b border-outline/10 flex items-center gap-2">
+        <span class="material-symbols-outlined text-[18px] text-primary">storefront</span>
+        <h2 class="font-headline-md text-primary capitalize">${b.replace(/-/g, ' ')}</h2>
+        <span class="ml-auto font-label-sm text-on-surface-variant flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-veg-green"></span> live · 10s</span>
+      </header>
+      <div class="p-4">
+        <div id="stats-${b}" class="flex gap-2 mb-4"></div>
+        <h3 class="font-label-bold uppercase tracking-wider text-on-surface-variant text-xs mb-2">In progress</h3>
+        <div id="orders-${b}" class="flex flex-col gap-2 max-h-[45vh] overflow-y-auto"></div>
+      </div>
+    </section>`).join('');
+  if (session.role === 'admin') await loadRevenue();
+  await refresh();
+  setInterval(refresh, 10000);
+}
+
+async function loadRevenue() {
+  const r = await fetch('/api/admin/revenue?period=day').then(x => x.json());
+  if (!r.success) return;
+  const el = document.getElementById('revenue');
+  el.classList.remove('hidden');
+  el.innerHTML = `
+    <span class="font-label-bold text-on-surface-variant">Today's revenue</span>
+    <span class="font-headline-md text-primary">${rs(r.data.totalRevenue)} <span class="font-label-sm text-on-surface-variant">· ${r.data.totalOrders} bills paid</span></span>`;
+}
+
+async function refresh() {
+  for (const b of window.branches) {
+    const [o, t] = await Promise.all([
+      fetch(`/api/orders?branch=${b}`).then(x => x.json()),
+      fetch(`/api/tables?branch=${b}`).then(x => x.json()),
+    ]);
+    renderBranch(b, o.success ? o.data : [], t.success ? t.data : []);
+  }
+}
+
+function ago(ts) {
+  const s = Math.max(0, (Date.now() - new Date(ts + 'Z').getTime()) / 1000);
+  if (s < 60) return `${Math.floor(s)}s ago`;
+  if (s < 3600) return `${Math.floor(s/60)}m ago`;
+  return `${Math.floor(s/3600)}h ago`;
+}
+
+function renderBranch(b, orders, tables) {
+  const counts = { new: 0, preparing: 0, ready: 0 };
+  const active = orders.filter(o => o.status !== 'delivered');
+  active.forEach(o => { if (counts[o.status] != null) counts[o.status]++; });
+  const occupied = tables.filter(t => t.status === 'occupied').length;
+
+  document.getElementById(`stats-${b}`).innerHTML = [
+    ['new', 'New', counts.new], ['preparing', 'Preparing', counts.preparing], ['ready', 'Ready', counts.ready],
+  ].map(([k, label, n]) => `
+    <div class="flex-1 rounded-lg border border-outline/20 bg-background/50 px-3 py-2">
+      <span class="font-headline-md block text-xl ${COLORS[k].split(' ')[0]}">${n}</span>
+      <span class="font-label-sm text-on-surface-variant">${label}</span>
+    </div>`).join('') + `
+    <div class="flex-1 rounded-lg border border-outline/20 bg-background/50 px-3 py-2">
+      <span class="font-headline-md block text-xl text-on-surface">${occupied}/${tables.length}</span>
+      <span class="font-label-sm text-on-surface-variant">Tables busy</span>
+    </div>`;
+
+  const el = document.getElementById(`orders-${b}`);
+  if (!active.length) {
+    el.innerHTML = `<div class="font-label-sm text-on-surface-variant/60 text-center py-6 border border-dashed border-outline/20 rounded-lg">No active orders</div>`;
+    return;
+  }
+  el.innerHTML = active.sort((a, z) => new Date(a.created_at + 'Z') - new Date(z.created_at + 'Z')).slice(0, 10).map(o => `
+    <div class="flex items-center justify-between gap-2 rounded-lg border border-outline/10 bg-background/50 px-3 py-2">
+      <div class="flex items-center gap-2 min-w-0">
+        <span class="font-headline-md text-primary text-[16px]">T${o.table_number}</span>
+        <span class="font-label-sm text-on-surface-variant truncate">${o.items.map(i => `${i.quantity}x ${esc(i.item_name)}${i.variant_name ? ` (${esc(i.variant_name)})` : ''}`).join(' · ')}</span>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <span class="font-label-sm text-on-surface-variant">${ago(o.created_at)}</span>
+        <span class="font-label-bold px-2 py-0.5 rounded-full ${COLORS[o.status]}">${o.status}</span>
+      </div>
+    </div>`).join('');
+}
+
+async function logout() { await fetch('/api/auth/logout', { method: 'POST' }); location.href = '/login'; }
+init();
+</script>
+</body>
+</html>

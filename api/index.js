@@ -217,7 +217,7 @@ export default async function handler(req, res) {
     res.end(fs.readFileSync(path.join(PUBLIC_DIR, 'order.html')));
     return;
   }
-  if (method === 'GET' && ['/login', '/kitchen', '/reception', '/admin', '/tables-qr'].includes(pathname)) {
+  if (method === 'GET' && ['/login', '/kitchen', '/reception', '/admin', '/tables-qr', '/dashboard'].includes(pathname)) {
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(fs.readFileSync(path.join(PUBLIC_DIR, pathname.slice(1) + '.html')));
     return;
