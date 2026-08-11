@@ -1,12 +1,15 @@
 services:
-  - type: web
+  - type: web_service
     name: amritsari-kulcha-system
     runtime: node
+    repo: https://github.com/Yash282802/amritsari-kulcha-system
+    branch: main
     plan: free
+    region: singapore
+    autoDeploy: true
     buildCommand: npm install
     startCommand: npm start
-    autoDeploy: true
-    healthCheckPath: /api/catalog/menu?branch=alkapuri
+    healthCheckPath: /api/catalog/menu
     envVars:
       - key: DATABASE_URL
         sync: false
