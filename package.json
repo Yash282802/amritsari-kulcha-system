@@ -2,7 +2,7 @@
   "name": "amritsari-kulcha-system",
   "version": "2.0.0",
   "type": "module",
-  "description": "Amritsari Kulcha — QR dine-in ordering, kitchen dashboard, reception billing & admin panel. Postgres + Vercel serverless (works locally too).",
+  "description": "Amritsari Kulcha — QR dine-in ordering, kitchen dashboard, reception billing & admin panel. Postgres + Render (works locally too).",
   "scripts": {
     "start": "node --env-file-if-exists=.env server.js",
     "dev": "node --watch --env-file-if-exists=.env server.js",
