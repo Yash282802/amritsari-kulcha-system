@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: amritsari-kulcha-system
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
+    healthCheckPath: /api/catalog/menu?branch=alkapuri
+    envVars:
+      - key: DATABASE_URL
+        sync: false
