@@ -26,6 +26,7 @@
     <button aria-label="Menu" class="flex items-center text-primary"><span class="material-symbols-outlined">restaurant_menu</span></button>
     <h1 class="font-display-lg text-headline-lg-mobile text-primary tracking-tight">Amritsari Kulcha</h1>
     <span class="flex items-center justify-center border border-outline/50 rounded-full px-3 py-1 text-on-surface-variant font-label-sm rotate-[3deg] shadow-[0_2px_4px_rgba(0,0,0,0.05)] bg-surface-bright" id="table-badge"></span>
+    <a id="track-link" href="#" class="hidden items-center gap-1 text-primary font-label-bold"><span class="material-symbols-outlined text-[18px]">receipt_long</span> Track</a>
   </div>
 </header>
 
@@ -283,7 +284,11 @@ async function placeOrder() {
     });
     const j = await r.json();
     if (!j.success) throw new Error(j.error?.message);
-    showToast('Order placed! It’s on its way to the kitchen.');
+    state.lastOrderId = j.data.orderId;
+    const track = $('track-link');
+    track.href = `/track?order=${state.lastOrderId}`;
+    track.classList.remove('hidden');
+    showToast(`Order placed! <a href="/track?order=${state.lastOrderId}" class="underline">Track it →</a>`);
     state.cart = []; state.sheetOpen = false; $('sheet-root').innerHTML = ''; refreshCart();
   } catch (e) {
     showToast(e.message, true);
@@ -293,9 +298,9 @@ async function placeOrder() {
 
 function showToast(msg, isError = false) {
   const t = $('toast');
-  t.textContent = msg;
+  t.innerHTML = msg;
   t.className = `fixed top-20 left-1/2 -translate-x-1/2 z-50 font-label-bold px-5 py-3 rounded-lg shadow-lg ${isError ? 'bg-error text-on-error' : 'bg-primary text-on-primary'}`;
-  setTimeout(() => t.classList.add('hidden'), 4000);
+  setTimeout(() => t.classList.add('hidden'), 6000);
 }
 
 loadMenu();

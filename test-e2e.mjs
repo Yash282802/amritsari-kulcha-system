@@ -25,6 +25,11 @@ async function run() {
   console.log('order placed:', order.data.data.orderId ? 'OK' : order.data);
   const orderId = order.data.data.orderId;
 
+  const badTrack = await j('GET', '/api/orders/nope/track');
+  console.log('track invalid id rejected:', badTrack.status === 404);
+  const track1 = await j('GET', `/api/orders/${orderId}/track`);
+  console.log('track (no auth) sees order:', track1.status === 200 && track1.data.data.order.status === 'new', 'items:', track1.data.data.order.items.length, 'bill:', track1.data.data.bill);
+
   const queue = await j('GET', `/api/orders?branch=alkapuri`, null, sid);
   const o = queue.data.data.find(x => x.id === orderId);
   console.log('kitchen queue sees order:', o.status === 'new', 'items:', o.items.length, 'price_snapshot:', o.items[0].price_at_order);
@@ -52,12 +57,16 @@ async function run() {
   console.log('table occupied:', table.status === 'occupied');
   const bill = await j('POST', '/api/bills/generate', { tableId: table.id }, sidR);
   console.log('bill generated:', bill.data.data.billId ? `subtotal=${bill.data.data.subtotal} tax=${bill.data.data.tax_amount} total=${bill.data.data.total}` : bill.data);
+  const track2 = await j('GET', `/api/orders/${orderId}/track`);
+  console.log('track sees bill subtotal:', track2.data.data.bill?.subtotal === bill.data.data.subtotal);
 
   const blockedOrder = await j('POST', '/api/orders', { branch: 'alkapuri', tableNumber: 3, items: [{ itemId: item1.id, quantity: 1 }] });
   console.log('order blocked while billing:', blockedOrder.status === 400);
 
   const pay = await j('PATCH', `/api/bills/${bill.data.data.id}/pay`, { method: 'upi', customerPhone: '9876543210' }, sidR);
   console.log('bill paid:', pay.data.data.payment_status === 'paid');
+  const track3 = await j('GET', `/api/orders/${orderId}/track`);
+  console.log('track sees bill paid:', track3.data.data.bill?.payment_status === 'paid');
 
   const tables2 = (await j('GET', '/api/tables?branch=alkapuri', null, sidR)).data.data;
   console.log('table available after pay:', tables2.find(t => t.table_number === 3).status === 'available');

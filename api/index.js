@@ -217,7 +217,7 @@ export default async function handler(req, res) {
     res.end(fs.readFileSync(path.join(PUBLIC_DIR, 'order.html')));
     return;
   }
-  if (method === 'GET' && ['/login', '/kitchen', '/reception', '/admin', '/tables-qr', '/dashboard'].includes(pathname)) {
+  if (method === 'GET' && ['/login', '/kitchen', '/reception', '/admin', '/tables-qr', '/dashboard', '/track'].includes(pathname)) {
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(fs.readFileSync(path.join(PUBLIC_DIR, pathname.slice(1) + '.html')));
     return;
@@ -273,6 +273,27 @@ export default async function handler(req, res) {
     }
     await db.prepare("UPDATE orders SET updated_at = (now() AT TIME ZONE 'UTC') WHERE id = ?").run(orderId);
     return ok(res, { orderId, status: 'new', tableNumber: t.table_number });
+  }
+
+  // Public: customer order tracking (no auth — order id is a random 64-bit token)
+  if (method === 'GET' && pathname.match(/^\/api\/orders\/([^/]+)\/track$/)) {
+    const orderId = pathname.match(/^\/api\/orders\/([^/]+)\/track$/)[1];
+    const order = await orderWithItems(orderId);
+    if (!order) return err(res, 'NOT_FOUND', 'Order not found', 404);
+    const branch = await db.prepare('SELECT name FROM branches WHERE id = ?').get(order.branch_id);
+    const bill = await db.prepare(`
+      SELECT id, subtotal, tax_amount, tax_rate_snapshot, service_charge, total, payment_status
+      FROM bills b JOIN bill_orders bo ON bo.bill_id = b.id
+      WHERE bo.order_id = ?
+    `).get(orderId);
+    return ok(res, {
+      order: {
+        id: order.id, status: order.status, tableNumber: order.table_number,
+        branchId: order.branch_id, branchName: branch?.name, createdAt: order.created_at, updatedAt: order.updated_at,
+        items: order.items.map(i => ({ name: i.item_name, variantName: i.variant_name, quantity: i.quantity, price: i.price_at_order })),
+      },
+      bill,
+    });
   }
 
   // ---- Authed staff endpoints ----

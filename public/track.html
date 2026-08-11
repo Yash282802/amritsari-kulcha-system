@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="theme-color" content="#5c091c"/>
+<title>Track Order — Amritsari Kulcha</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="/assets/tailwind-config.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Work+Sans:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL@20..48,100..700,0..1&display=swap" rel="stylesheet">
+<style>
+  body { background: #FBF3E7; }
+  .slide-up { animation: slideUp .3s ease-out forwards; }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body class="font-body-md text-on-surface antialiased">
+<header class="fixed top-0 w-full z-40 bg-background border-b border-on-surface/10">
+  <div class="flex justify-between items-center px-container-margin py-unit max-w-[640px] mx-auto">
+    <h1 class="font-display-lg text-headline-lg-mobile text-primary tracking-tight">Your Order</h1>
+    <a id="menu-link" href="#" class="flex items-center gap-1 text-primary font-label-bold"><span class="material-symbols-outlined text-[18px]">restaurant_menu</span> Menu</a>
+  </div>
+</header>
+
+<main class="max-w-[640px] mx-auto pt-[76px] pb-[120px] px-container-margin flex flex-col gap-stack-lg" id="main"></main>
+
+<script>
+const ORDER = new URLSearchParams(location.search).get('order');
+const rs = n => `₹${(n/100).toFixed(2)}`;
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const STEPS = ['new', 'preparing', 'ready', 'delivered'];
+const LABELS = { new: 'Ordered', preparing: 'Preparing', ready: 'Ready', delivered: 'Delivered' };
+const STATUS_COLOR = {
+  new: 'text-primary border-primary/30 bg-primary/5',
+  preparing: 'text-secondary border-secondary/30 bg-secondary/5',
+  ready: 'text-veg-green border-veg-green/30 bg-veg-green/5',
+  delivered: 'text-on-surface border-outline/30 bg-surface-dim',
+};
+
+async function load() {
+  const r = await fetch(`/api/orders/${ORDER}/track`);
+  const j = await r.json();
+  if (j.success) render(j.data);
+  else renderNotFound();
+}
+
+function render(d) {
+  const o = d.order;
+  const stepIdx = STEPS.indexOf(o.status);
+  const subtotal = o.items.reduce((s, i) => s + i.quantity * i.price, 0);
+  document.getElementById('menu-link').href = `/b/${o.branchId}/${o.tableNumber}`;
+  document.getElementById('main').innerHTML = `
+    <section class="slide-up bg-surface-bright border border-on-background/10 rounded-xl p-stack-md">
+      <div class="flex items-center justify-between gap-2 mb-stack-md">
+        <div>
+          <p class="font-label-sm text-on-surface-variant">Table ${o.tableNumber} · ${esc(o.branchName)}</p>
+          <p class="font-headline-md text-on-background">${LABELS[o.status] || o.status}</p>
+        </div>
+        <span class="font-label-bold px-3 py-1 rounded-full border capitalize ${STATUS_COLOR[o.status] || STATUS_COLOR.delivered}">${o.status}</span>
+      </div>
+      <div class="flex items-start">
+        ${STEPS.map((s, i) => {
+          const done = i <= stepIdx;
+          return `
+          <div class="flex-1 flex flex-col items-center gap-1">
+            <div class="w-3 h-3 rounded-full ${done ? 'bg-primary' : 'bg-outline/20'} ${i === stepIdx ? 'ring-4 ring-primary/20' : ''}"></div>
+            <span class="font-label-sm text-center ${done ? 'text-primary' : 'text-on-surface-variant/60'}">${LABELS[s]}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </section>
+
+    <section class="slide-up bg-surface-bright border border-on-background/10 rounded-xl p-stack-md flex flex-col gap-stack-sm">
+      <h2 class="font-label-bold uppercase tracking-wider text-on-surface-variant text-xs">Your items</h2>
+      ${o.items.map(i => `
+        <div class="flex justify-between items-start gap-gutter">
+          <div class="flex gap-gutter min-w-0">
+            <span class="w-8 h-8 rounded border border-outline/20 flex items-center justify-center bg-background font-label-bold text-primary flex-shrink-0">${i.quantity}x</span>
+            <div class="min-w-0">
+              <p class="font-body-md font-medium text-on-background">${esc(i.name)}</p>
+              ${i.variantName ? `<p class="font-label-sm text-on-surface-variant">${esc(i.variantName)}</p>` : ''}
+            </div>
+          </div>
+          <span class="font-body-md font-medium text-on-background">${rs(i.quantity * i.price)}</span>
+        </div>`).join('')}
+      <div class="border-t border-outline/10 pt-stack-sm flex justify-between font-label-bold text-on-background">
+        <span>Order subtotal</span><span>${rs(subtotal)}</span>
+      </div>
+    </section>
+
+    ${d.bill ? `
+    <section class="slide-up bg-surface-bright border border-on-background/10 rounded-xl p-stack-md flex flex-col gap-stack-sm">
+      <div class="flex justify-between items-center">
+        <h2 class="font-label-bold uppercase tracking-wider text-on-surface-variant text-xs">Your bill</h2>
+        <span class="font-label-bold px-3 py-1 rounded-full border capitalize ${d.bill.payment_status === 'paid' ? 'text-veg-green border-veg-green/30 bg-veg-green/5' : 'text-secondary border-secondary/30 bg-secondary/5'}">${d.bill.payment_status}</span>
+      </div>
+      <div class="flex justify-between font-body-md text-on-surface-variant"><span>Subtotal</span><span>${rs(d.bill.subtotal)}</span></div>
+      <div class="flex justify-between font-body-md text-on-surface-variant"><span>GST (${d.bill.tax_rate_snapshot}%)</span><span>${rs(d.bill.tax_amount)}</span></div>
+      <div class="flex justify-between font-body-md text-on-surface-variant"><span>Restaurant charges</span><span>${rs(d.bill.service_charge)}</span></div>
+      <div class="w-full border-b border-dashed border-outline/30"></div>
+      <div class="flex justify-between items-end">
+        <span class="font-headline-md text-on-background">Total</span>
+        <span class="font-headline-lg-mobile text-primary">${rs(d.bill.total)}</span>
+      </div>
+    </section>` : ''}
+
+    <p class="text-center font-label-sm text-on-surface-variant/60 flex items-center justify-center gap-1">
+      <span class="material-symbols-outlined text-[14px]">sync</span> Updates every 10 seconds
+    </p>`;
+}
+
+function renderNotFound() {
+  document.getElementById('menu-link').classList.add('hidden');
+  document.getElementById('main').innerHTML = `
+    <div class="slide-up flex flex-col items-center gap-stack-sm text-center py-stack-lg">
+      <span class="material-symbols-outlined text-[48px] text-error">search_off</span>
+      <h2 class="font-headline-md text-on-background">Order not found</h2>
+      <p class="font-body-md text-on-surface-variant max-w-xs">This link is invalid or the order is no longer available.</p>
+      <a href="/" class="bg-primary text-on-primary font-label-bold px-6 py-3 rounded-lg">Scan the QR at your table</a>
+    </div>`;
+}
+
+if (!ORDER) renderNotFound();
+else { load(); setInterval(load, 10000); }
+</script>
+</body>
+</html>
