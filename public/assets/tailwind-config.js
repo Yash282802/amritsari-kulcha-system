@@ -71,10 +71,21 @@ window.tailwind.config = {
         'headline-md': ['24px', { lineHeight: '32px', fontWeight: '600' }],
         'headline-lg-mobile': ['28px', { lineHeight: '36px', fontWeight: '700' }],
         'label-sm': ['12px', { lineHeight: '16px', fontWeight: '500' }],
-        'label-bold': ['14px', { lineHeight: '20px', letterSpacing: '0.05em', fontWeight: '600' }],
+        'label-bold': ['14px', { lineHeight: '20px', fontWeight: '600' }],
         'body-md': ['16px', { lineHeight: '24px', fontWeight: '400' }],
         'headline-lg': ['32px', { lineHeight: '40px', fontWeight: '700' }]
       }
     }
   }
 };
+
+// Global typography normalization (all pages load this file):
+// 1. Material Symbols render on the text baseline — pull them down to align with labels.
+// 2. Elements tagged `font-label-bold` with no explicit size default to 16px/normal (not bold!).
+//    Give them a cohesive 14px/600 so every label, pill, and button looks and aligns alike.
+//    (Any element that also sets a `text-*` size keeps it — Tailwind's later stylesheet wins there.)
+document.head.appendChild(Object.assign(document.createElement('style'), { textContent: `
+  .material-symbols-outlined { vertical-align: -0.2em; line-height: 1; }
+  .font-label-bold { font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: 0; }
+  body { line-height: 1.5; }
+` }));
