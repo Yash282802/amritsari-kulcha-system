@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
 import { db, pool, tx, q, seed, uid, verifyPassword, getTaxRate, getServiceCharge, setSetting } from '../db.js';
+import { sendTemplate } from '../wa.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 4000;
@@ -110,25 +111,29 @@ async function orderWithItems(orderId) {
 const NEXT_STATUS = { new: 'preparing', preparing: 'ready', ready: 'delivered' };
 const PREV_STATUS = { preparing: 'new', ready: 'preparing', delivered: 'ready' };
 
-// ---------- Notifications (WhatsApp stub per PRD) ----------
+// ---------- Notifications (WhatsApp Cloud API) ----------
 async function notifyInvoice(bill) {
   if (!bill.customer_phone) return;
   const log = (status) => db.prepare('INSERT INTO notification_log (id, bill_id, type, phone, status) VALUES (?,?,?,?,?)').run(uid('ntf'), bill.id, 'invoice', bill.customer_phone, status);
-  const okSend = Math.random() > 0.05; // ~5% failure to exercise retry path
-  await log(okSend ? 'sent' : 'failed');
-  if (!okSend) {
-    const okRetry = Math.random() > 0.5;
-    await log(okRetry ? 'sent' : 'failed');
-    if (!okRetry) await db.prepare('UPDATE bills SET notif_failed = 1 WHERE id = ?').run(bill.id);
+  const tpl = process.env.WA_TPL_BILL || 'bill_receipt';
+  const params = [bill.branch_name, `Table ${bill.table_number}`, `₹${(bill.total / 100).toFixed(2)}`];
+  const res = await sendTemplate(bill.customer_phone, tpl, params);
+  await log(res.status);
+  if (res.status === 'failed') {
+    const retry = await sendTemplate(bill.customer_phone, tpl, params);
+    await log(retry.status);
+    if (retry.status === 'failed') await db.prepare('UPDATE bills SET notif_failed = 1 WHERE id = ?').run(bill.id);
   }
-  console.log(`[notify] invoice for bill ${bill.id} -> ${bill.customer_phone}`);
+  console.log(`[notify] invoice for bill ${bill.id} -> ${bill.customer_phone} (${res.status})`);
 }
 
 // Review request: once per phone + date, ~24h after payment.
-// No background process on Vercel — runs lazily on staff page polls.
+// No background process on Render free — runs lazily on staff page polls.
 async function reviewJob() {
   const due = await db.prepare(`
-    SELECT b.id, b.customer_phone, substr(b.paid_at::text,1,10) AS paid_date FROM bills b
+    SELECT b.id, b.customer_phone, br.name AS branch_name, br.review_link,
+      substr(b.paid_at::text,1,10) AS paid_date FROM bills b
+    JOIN branches br ON br.id = b.branch_id
     WHERE b.payment_status = 'paid' AND b.customer_phone IS NOT NULL
       AND b.paid_at <= ((now() AT TIME ZONE 'UTC') - interval '24 hours')
       AND NOT EXISTS (
@@ -142,8 +147,9 @@ async function reviewJob() {
       )
   `).all();
   for (const r of due) {
-    await db.prepare("INSERT INTO notification_log (id, bill_id, type, phone, status) VALUES (?,?,?,?,?)").run(uid('ntf'), r.id, 'review_request', r.customer_phone, 'sent');
-    console.log(`[notify] review request bill ${r.id} -> ${r.customer_phone} (paid ${r.paid_date})`);
+    const res = await sendTemplate(r.customer_phone, process.env.WA_TPL_REVIEW || 'review_request', [r.branch_name, r.review_link]);
+    await db.prepare("INSERT INTO notification_log (id, bill_id, type, phone, status) VALUES (?,?,?,?,?)").run(uid('ntf'), r.id, 'review_request', r.customer_phone, res.status);
+    console.log(`[notify] review request bill ${r.id} -> ${r.customer_phone} (paid ${r.paid_date}, ${res.status})`);
   }
 }
 
@@ -475,7 +481,7 @@ export default async function handler(req, res) {
     } catch (e) { return err(res, 'PAY_FAILED', 'Could not mark bill paid'); }
 
     const paid = await getBill(billId);
-    await notifyInvoice(paid); // stub — logs to notification_log, retries once on failure
+    await notifyInvoice(paid); // sends WhatsApp bill, retries once on failure
     return ok(res, paid);
   }
 
