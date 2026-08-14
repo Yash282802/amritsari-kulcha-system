@@ -122,10 +122,6 @@ function cardHtml(item) {
   return `
   <article class="flex gap-gutter p-unit bg-surface-bright rounded-lg border border-on-background/10 shadow-[0_2px_8px_rgba(43,33,28,0.02)] relative overflow-hidden">
     ${isBest ? `<div class="absolute top-2 -right-6 bg-secondary-container text-on-secondary-container font-label-sm text-[10px] px-6 py-0.5 rotate-45 shadow-sm z-10 font-bold uppercase tracking-wider border border-secondary/20">Bestseller</div>` : ''}
-    <div class="w-[100px] h-[100px] rounded-md overflow-hidden flex-shrink-0 relative bg-surface-dim">
-      <div class="w-full h-full flex items-center justify-center text-outline/50"><span class="material-symbols-outlined text-4xl">bakery_dining</span></div>
-      ${item.is_veg ? `<div class="absolute top-1 left-1 bg-surface-bright rounded p-[2px] border border-outline/30"><div class="w-2 h-2 rounded-full bg-veg-green"></div></div>` : ''}
-    </div>
     <div class="flex flex-col justify-between flex-grow">
       <div>
         <h3 class="font-headline-md text-body-lg text-on-background font-semibold ${isBest?'pr-4':''}">${item.name}</h3>
