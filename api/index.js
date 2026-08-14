@@ -226,6 +226,10 @@ export default async function handler(req, res) {
   // ---- API ----
   if (!pathname.startsWith('/api/')) { err(res, 'NOT_FOUND', 'Not found', 404); return; }
 
+  if (method === 'GET' && pathname === '/api/health') {
+    return ok(res, { status: 'ok' });
+  }
+
   // Public: catalog
   if (method === 'GET' && pathname === '/api/catalog/menu') {
     const branch = searchParams.get('branch');

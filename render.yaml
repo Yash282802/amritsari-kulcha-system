@@ -6,7 +6,7 @@ services:
     buildCommand: npm install
     startCommand: npm start
     autoDeploy: true
-    healthCheckPath: /api/catalog/menu?branch=alkapuri
+    healthCheckPath: /api/health
     envVars:
       - key: DATABASE_URL
         sync: false

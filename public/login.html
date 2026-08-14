@@ -11,50 +11,128 @@
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght@20..48,100..700&display=swap" rel="stylesheet">
 </head>
 <body class="bg-background-cream font-body-md text-on-surface antialiased min-h-screen flex items-center justify-center p-4">
-  <div class="w-full max-w-[400px]">
+  <div class="w-full max-w-[420px]">
     <div class="text-center mb-stack-md">
       <h1 class="font-display-lg text-headline-lg text-primary tracking-tight">Amritsari Kulcha</h1>
       <p class="font-body-lg text-on-surface-variant mt-1">Staff portal</p>
     </div>
     <form class="bg-surface-bright border border-on-background/10 rounded-xl p-stack-md flex flex-col gap-stack-md shadow-[0_2px_8px_rgba(43,33,28,0.02)]" onsubmit="return doLogin(event)">
-      <div>
-        <label class="font-label-bold text-on-surface" for="u">Username</label>
-        <input id="u" autocomplete="username" required class="mt-1 w-full px-4 py-3 border border-outline rounded bg-surface-bright font-body-md focus:border-primary outline-none transition-colors" placeholder="kitchen_alkapuri">
+      <input type="hidden" id="u"/>
+
+      <div id="branchStep">
+        <label class="font-label-bold text-on-surface" for="branchGrid">Choose your place</label>
+        <div id="branchGrid" class="mt-2 grid grid-cols-2 gap-2">
+          <button type="button" data-branch="alkapuri" class="branch-btn px-3 py-3 border-2 border-outline-variant rounded-lg font-label-bold text-on-surface text-left flex items-center gap-2">
+            <span class="material-symbols-outlined text-[18px] text-primary">storefront</span>Alkapuri
+          </button>
+          <button type="button" data-branch="nizampura" class="branch-btn px-3 py-3 border-2 border-outline-variant rounded-lg font-label-bold text-on-surface text-left flex items-center gap-2">
+            <span class="material-symbols-outlined text-[18px] text-primary">storefront</span>Nizampura
+          </button>
+          <button type="button" data-branch="old-chhani-road" class="branch-btn px-3 py-3 border-2 border-outline-variant rounded-lg font-label-bold text-on-surface text-left flex items-center gap-2">
+            <span class="material-symbols-outlined text-[18px] text-primary">storefront</span>Old Chhani Road
+          </button>
+          <button type="button" data-branch="gorwa" class="branch-btn px-3 py-3 border-2 border-outline-variant rounded-lg font-label-bold text-on-surface text-left flex items-center gap-2">
+            <span class="material-symbols-outlined text-[18px] text-primary">storefront</span>Gorwa
+          </button>
+        </div>
       </div>
-      <div>
+
+      <div id="roleStep" class="hidden">
+        <label class="font-label-bold text-on-surface" for="roleGrid">You are</label>
+        <div id="roleGrid" class="mt-2 grid grid-cols-2 gap-2">
+          <button type="button" data-role="kitchen" class="role-btn px-4 py-3 border-2 border-outline-variant rounded-lg font-label-bold text-on-surface flex items-center justify-center gap-2">
+            <span class="material-symbols-outlined text-[20px] text-primary">restaurant</span>Kitchen
+          </button>
+          <button type="button" data-role="reception" class="role-btn px-4 py-3 border-2 border-outline-variant rounded-lg font-label-bold text-on-surface flex items-center justify-center gap-2">
+            <span class="material-symbols-outlined text-[20px] text-primary">countertops</span>Reception
+          </button>
+        </div>
+      </div>
+
+      <div id="passStep" class="hidden">
         <label class="font-label-bold text-on-surface" for="p">Password</label>
         <input id="p" type="password" autocomplete="current-password" required class="mt-1 w-full px-4 py-3 border border-outline rounded bg-surface-bright font-body-md focus:border-primary outline-none transition-colors" placeholder="••••••••">
       </div>
+
+      <div id="manualField" style="display:none">
+        <label class="font-label-bold text-on-surface" for="u">Username</label>
+        <input id="mu" type="text" autocomplete="username" class="mt-1 w-full px-4 py-3 border border-outline rounded bg-surface-bright font-body-md focus:border-primary outline-none transition-colors" placeholder="owner">
+      </div>
+
+      <div id="manualLink" class="text-center">
+        <button type="button" id="manualToggle" class="font-label-sm text-primary underline underline-offset-2">Owner login</button>
+      </div>
+
       <p id="msg" class="font-label-sm text-error hidden"></p>
-      <button class="w-full bg-primary text-on-primary font-label-bold py-3 rounded-lg flex items-center justify-center gap-2 hover:bg-primary-container transition-colors" id="btn">
+      <button class="hidden w-full bg-primary text-on-primary font-label-bold py-3 rounded-lg flex items-center justify-center gap-2 hover:bg-primary-container transition-colors" id="btn">
         Log in <span class="material-symbols-outlined text-[18px]">login</span>
       </button>
-      <p class="text-center font-label-sm text-on-surface-variant">Kitchen & reception logins are scoped to one branch. Owner login sees all branches.</p>
     </form>
   </div>
 <script>
-async function doLogin(e) {
+const ROLE_SLUG = { kitchen: 'kitchen', reception: 'reception' };
+const BRANCH_USER = { alkapuri: 'alkapuri', nizampura: 'nizampura', 'old-chhani-road': 'oldchhani', gorwa: 'gorwa' };
+let selected = { branch: null, role: null };
+
+function selectBranch(el) {
+  selected.branch = el.dataset.branch;
+  document.querySelectorAll('.branch-btn').forEach(b => b.classList.toggle('border-primary', b === el));
+  document.querySelectorAll('.branch-btn').forEach(b => b.classList.toggle('bg-primary/5', b === el));
+  document.getElementById('roleStep').classList.remove('hidden');
+  document.getElementById('branchStep').classList.add('hidden');
+  document.getElementById('manualLink').classList.add('hidden');
+  document.getElementById('msg').classList.add('hidden');
+}
+function selectRole(el) {
+  selected.role = el.dataset.role;
+  document.querySelectorAll('.role-btn').forEach(b => b.classList.toggle('border-primary', b === el));
+  document.querySelectorAll('.role-btn').forEach(b => b.classList.toggle('bg-primary/5', b === el));
+  document.getElementById('passStep').classList.remove('hidden');
+  document.getElementById('btn').classList.remove('hidden');
+  document.getElementById('p').focus();
+}
+document.querySelectorAll('.branch-btn').forEach(b => b.addEventListener('click', () => selectBranch(b)));
+document.querySelectorAll('.role-btn').forEach(r => r.addEventListener('click', () => selectRole(r)));
+
+document.getElementById('manualToggle').addEventListener('click', () => {
+  document.getElementById('branchStep').classList.remove('hidden');
+  document.getElementById('roleStep').classList.remove('hidden');
+  document.getElementById('passStep').classList.remove('hidden');
+  document.getElementById('btn').classList.remove('hidden');
+  document.getElementById('manualLink').classList.add('hidden');
+  document.getElementById('manualField').style.display = 'block';
+  document.getElementById('mu').focus();
+});
+
+function doLogin(e) {
   e.preventDefault();
+  const manual = document.getElementById('manualField').style.display !== 'none';
+  const u = document.getElementById('u');
+  if (!manual) {
+    if (!selected.branch || !selected.role) { document.getElementById('msg').textContent = 'Choose your place and designation'; document.getElementById('msg').classList.remove('hidden'); return false; }
+    u.value = ROLE_SLUG[selected.role] + '_' + BRANCH_USER[selected.branch];
+  } else {
+    u.value = document.getElementById('mu').value.trim();
+  }
   const btn = document.getElementById('btn');
   const msg = document.getElementById('msg');
   msg.classList.add('hidden');
   btn.disabled = true;
   btn.textContent = 'Signing in…';
-  try {
-    const r = await fetch('/api/auth/login', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: document.getElementById('u').value.trim(), password: document.getElementById('p').value })
-    });
-    const j = await r.json();
+  fetch('/api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: u.value.trim(), password: document.getElementById('p').value })
+  }).then(r => r.json()).then(j => {
     if (!j.success) { msg.textContent = j.error.message; msg.classList.remove('hidden'); btn.disabled = false; btn.innerHTML = 'Log in <span class="material-symbols-outlined text-[18px]">login</span>'; return; }
     location.href = { kitchen: '/kitchen', reception: '/reception', admin: '/admin' }[j.data.role] || '/login';
-  } catch (err) {
+  }).catch(() => {
     msg.textContent = 'Network error, please try again';
     msg.classList.remove('hidden');
     btn.disabled = false; btn.innerHTML = 'Log in <span class="material-symbols-outlined text-[18px]">login</span>';
-  }
+  });
+  return false;
 }
-// if already logged in, go to role page
+
 (async () => {
   try {
     const r = await fetch('/api/auth/me');
