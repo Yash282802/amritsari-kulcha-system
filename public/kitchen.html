@@ -42,7 +42,6 @@ const COLS = [
   { key: 'new', label: 'New', icon: 'add_circle', color: 'text-primary border-primary/30 bg-primary/5' },
   { key: 'preparing', label: 'Preparing', icon: 'local_fire_department', color: 'text-secondary border-secondary/30 bg-secondary/5' },
   { key: 'ready', label: 'Ready', icon: 'check_circle', color: 'text-veg-green border-veg-green/30 bg-veg-green/5' },
-  { key: 'delivered', label: 'Delivered', icon: 'room_service', color: 'text-on-surface-variant border-outline/30 bg-surface-bright' },
 ];
 const rs = n => `₹${(n/100).toFixed(0)}`;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
