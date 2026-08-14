@@ -206,22 +206,182 @@ const BRANCHES = [
   { id: 'gorwa', name: 'Gorwa', whatsapp: '919898989801', address: 'Gorwa, Vadodara', gstin: '24AABCK0001A1Z5', review: 'https://g.page/r/GORWA/review' },
 ];
 
-const MENU = [
-  { category: 'Signature Kulchas', name: 'Amritsari Paneer Kulcha', desc: 'Crispy tandoori bread stuffed with spiced paneer, onions and fresh coriander, served with chole & chutney.', price: 24000, veg: 1, bestseller: 1 },
-  { category: 'Signature Kulchas', name: 'Classic Aloo Kulcha', desc: 'The original Amritsari special. Mashed potatoes with crushed coriander seeds and anardana.', price: 18000, veg: 1, bestseller: 0 },
-  { category: 'Thali', name: 'Chur Chur Naan Thali', desc: 'Crispy, flaky crushed naan served with unlimited dal makhani, chole and raita.', price: 32000, veg: 1, bestseller: 1 },
-  { category: 'Accompaniments', name: 'Extra White Makhan', desc: 'A generous slab of house churned white butter.', price: 4000, veg: 1, bestseller: 0 },
-  { category: 'Accompaniments', name: 'Boondi Raita', desc: 'Cooling boondi raita with roasted cumin and chilli.', price: 8000, veg: 1, bestseller: 0 },
-  { category: 'Beverages', name: 'Classic Sweet Lassi', desc: 'Served chilled in a kulhad.', price: 9000, veg: 1, bestseller: 0 },
-  { category: 'Beverages', name: 'Masala Chaas', desc: 'Spiced buttermilk with mint and ginger.', price: 6000, veg: 1, bestseller: 0 },
-  { category: 'Sweets', name: 'Gajar Halwa', desc: 'Slow-cooked carrot halwa with ghee and khoya.', price: 14000, veg: 1, bestseller: 0 },
-  { category: 'Sweets', name: 'Rasmalai', desc: 'Soft chhena discs in saffron-sweetened milk.', price: 16000, veg: 1, bestseller: 0 },
+// Prices are in ₹ (stored as paise = ×100 at insert). Atta column = atta price; null = maida only.
+const KULCHAS = [
+  ['Pizza Special Kulcha', 340, null],
+  ['Cheese Mushroom Corn Kulcha', 320, 340],
+  ['Cheese Corn Kulcha', 300, 320],
+  ['Amritsari Special Kulcha', 280, 300, 1],
+  ['Cheese Chilli Garlic Kulcha', 270, 290],
+  ['Cheese Paneer Kulcha', 270, 290],
+  ['Hara-Bhara Cheese Kulcha', 260, 280],
+  ['Mix Kulcha', 250, 270],
+  ['Paneer Garlic Kulcha', 250, 270],
+  ['Cheese Kulcha', 240, 260],
+  ['Paneer Kulcha', 230, 250],
+  ['Child Special Kulcha', 200, null],
+  ['Aloo Gobi Kulcha', 170, 190],
+  ['Aloo Kulcha', 160, 180],
 ];
 
-const VARIANTS = {
-  'Amritsari Paneer Kulcha': [{ v: 'Maida', d: 0 }, { v: 'Atta', d: 500 }, { v: 'Extra Butter', d: 2000 }],
-  'Classic Aloo Kulcha': [{ v: 'Maida', d: 0 }, { v: 'Atta', d: 500 }],
-};
+const MENU = [
+  ...KULCHAS.map(([name, maida, , best]) => ({ category: 'Amritsari Kulcha', name, desc: 'Served with chole & chutney.', price: maida, veg: 1, bestseller: best || 0 })),
+  { category: 'Cold Drinks', name: 'Patiala Dry Fruit Lassi', desc: 'Rich lassi loaded with dry fruits.', price: 180, veg: 1, bestseller: 1 },
+  { category: 'Cold Drinks', name: 'Lassi (Full)', price: 140, veg: 1 },
+  { category: 'Cold Drinks', name: 'Lassi (Half)', price: 80, veg: 1 },
+  { category: 'Cold Drinks', name: 'Masala Butter Milk', price: 40, veg: 1 },
+  { category: 'Cold Drinks', name: 'Butter Milk', price: 30, veg: 1 },
+  { category: 'Cold Drinks', name: 'Mineral Water', price: 20, veg: 1 },
+  { category: 'Starters', name: 'Paneer Chilly Gravy', price: 290, veg: 1 },
+  { category: 'Starters', name: 'Paneer Chilly Dry', price: 280, veg: 1 },
+  { category: 'Starters', name: 'Tandoori Paneer Hilltop', price: 280, veg: 1 },
+  { category: 'Starters', name: 'Cheese Chaska', price: 280, veg: 1 },
+  { category: 'Starters', name: 'Tandoori Mushroom Dry', price: 280, veg: 1 },
+  { category: 'Starters', name: 'Paneer Pahadi Tikka', price: 280, veg: 1 },
+  { category: 'Starters', name: 'Paneer Achari Tikka Dry', price: 280, veg: 1 },
+  { category: 'Starters', name: 'Paneer Tikka Dry', price: 280, veg: 1 },
+  { category: 'Starters', name: 'Paneer Kali Mari Tikka Dry', price: 280, veg: 1 },
+  { category: 'Starters', name: 'Paneer 65', price: 270, veg: 1 },
+  { category: 'Starters', name: 'Cheese Corn Tikki', price: 270, veg: 1 },
+  { category: 'Starters', name: 'Gulabi Kabab', price: 260, veg: 1 },
+  { category: 'Starters', name: 'Veg. Crispy', price: 240, veg: 1 },
+  { category: 'Starters', name: 'Paneer Malai Tikka Dry', price: 250, veg: 1 },
+  { category: 'Starters', name: 'Hara-Bhara Kabab', price: 240, veg: 1 },
+  { category: 'Soup', name: 'Cream & Veg. Soup', price: 160, veg: 1 },
+  { category: 'Soup', name: 'Tomato Soup', price: 150, veg: 1 },
+  { category: 'Soup', name: 'Sweet Corn Soup', price: 140, veg: 1 },
+  { category: 'Soup', name: 'Hot & Sour Soup', price: 130, veg: 1 },
+  { category: 'Soup', name: 'Veg. Manchow Soup', price: 120, veg: 1 },
+  { category: 'Soup', name: 'Lemon Coriander Soup', price: 120, veg: 1 },
+  { category: 'Salad', name: 'Mix Veg Raita', price: 120, veg: 1 },
+  { category: 'Salad', name: 'Green Salad', price: 100, veg: 1 },
+  { category: 'Salad', name: 'Boondi Raita', price: 100, veg: 1 },
+  { category: 'Salad', name: 'Plain Curd', price: 50, veg: 1 },
+  { category: 'Papad', name: 'Tuta Futa Khichiya Papad', price: 120, veg: 1 },
+  { category: 'Papad', name: 'Fry Cheese Masala Papad', price: 100, veg: 1 },
+  { category: 'Papad', name: 'Masala Papad', price: 50, veg: 1 },
+  { category: 'Papad', name: 'Fry Papad', price: 30, veg: 1 },
+  { category: 'Papad', name: 'Plain Papad', price: 20, veg: 1 },
+  { category: 'Amritsari Special Thali', name: 'Punjabi Thali (Lunch)', price: 240, veg: 1, bestseller: 1 },
+  { category: 'Amritsari Special Thali', name: 'Cheese Chur-Chur Naan Thali', desc: 'Chur-chur naan, dal makhani, paneer sabji, salad, chaas.', price: 330, veg: 1 },
+  { category: 'Amritsari Special Thali', name: 'Cheese Paneer Chur-Chur Naan Thali', desc: 'Chur-chur naan, dal makhani, paneer sabji, salad, chaas.', price: 360, veg: 1 },
+  { category: 'Amritsari Special Thali', name: 'Combo Fixed Thali (Seasonal)', price: 360, veg: 1 },
+  { category: 'Amritsari Special Thali', name: 'Daal Makhani – Missi Roti Combo', price: 250, veg: 1 },
+  { category: 'Amritsari Special Thali', name: 'Paneer Bhurji Tawa Paratha Combo', price: 260, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Veg. Badami Pasanda', price: 320, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Avadhi Kurma', price: 300, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Veg Hungama', price: 280, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Mushroom Kaju', price: 270, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Saag Savera', price: 260, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Malai Kofta', price: 260, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Mushroom Masala', price: 240, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Veg Tawa', price: 240, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Veg Rajwadi', price: 240, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Methi Malai Mutter', price: 240, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Corn Capsicum Masala', price: 240, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Veg Kofta', price: 240, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Veg Kolhapuri', price: 240, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Veg Kadai', price: 240, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Veg Mushroom', price: 240, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Mix Veg', price: 240, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Mutter Palak', price: 230, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Corn Palak', price: 230, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Veg Handi', price: 230, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Veg Makkhanwala', price: 230, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Veg Hyderabadi', price: 230, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Veg Handi Masala', price: 220, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Veg Jaipuri', price: 220, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Sarso Da Saag', price: 220, veg: 1 },
+  { category: 'Veg Sabzi', name: 'Chana Masala', price: 180, veg: 1 },
+  { category: 'Cheese Special', name: 'Cheese Anguri', price: 280, veg: 1 },
+  { category: 'Cheese Special', name: 'Cheese Paneer Corn Masala', price: 260, veg: 1 },
+  { category: 'Cheese Special', name: 'Cheese Paneer Masala', price: 250, veg: 1 },
+  { category: 'Cheese Special', name: 'Cheese Handi', price: 250, veg: 1 },
+  { category: 'Cheese Special', name: 'Cheese Kadai', price: 240, veg: 1 },
+  { category: 'Cheese Special', name: 'Cheese Butter Masala', price: 240, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Amritsari Special', price: 300, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Tiranga', price: 300, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Hangama', price: 300, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Tiger', price: 280, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Jawala Mukhi', price: 280, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Patiyala', price: 280, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Bullet', price: 280, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Angara', price: 270, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Tawa Paneer', price: 260, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Birbal', price: 260, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Shahi Paneer', price: 260, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Kadai', price: 260, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Bhurji', price: 260, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Handi', price: 260, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Kolhapuri', price: 250, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Balti', price: 250, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Pasanda', price: 250, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Rajwadi', price: 250, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Lasaniya', price: 250, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Mushroom', price: 250, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer 2 Payaz', price: 250, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Toofani', price: 250, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Chatpatta', price: 250, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Tikka Masala', price: 240, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Lakhnavi', price: 230, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Palak Paneer', price: 230, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Chana Paneer', price: 230, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer La Jawab', price: 230, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Mutter Paneer', price: 230, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Capsicum', price: 230, veg: 1 },
+  { category: 'Paneer Sabzi', name: 'Paneer Butter Masala', price: 220, veg: 1 },
+  { category: 'Kaju Sabzi', name: 'Kaju Paneer Cheese Masala', price: 300, veg: 1 },
+  { category: 'Kaju Sabzi', name: 'Kaju Khoya', price: 280, veg: 1 },
+  { category: 'Kaju Sabzi', name: 'Kaju Paneer Masala', price: 280, veg: 1 },
+  { category: 'Kaju Sabzi', name: 'Kaju Handi', price: 270, veg: 1 },
+  { category: 'Kaju Sabzi', name: 'Kaju Masala', price: 270, veg: 1 },
+  { category: 'Kaju Sabzi', name: 'Kaju Curry', price: 260, veg: 1 },
+  { category: 'Kaju Sabzi', name: 'Kaju Cheese Masala', price: 250, veg: 1 },
+  { category: 'Tandoor Se', name: 'Roti Basket', price: 370, veg: 1 },
+  { category: 'Tandoor Se', name: 'Cheese Chilli Garlic Naan', price: 170, veg: 1 },
+  { category: 'Tandoor Se', name: 'Cheese Chilli Naan', price: 160, veg: 1 },
+  { category: 'Tandoor Se', name: 'Cheese Naan', price: 150, veg: 1, bestseller: 1 },
+  { category: 'Tandoor Se', name: 'ChurChur Naan', price: 140, veg: 1 },
+  { category: 'Tandoor Se', name: 'Garlic Naan', price: 110, veg: 1 },
+  { category: 'Tandoor Se', name: 'Butter Naan', price: 100, veg: 1 },
+  { category: 'Tandoor Se', name: 'Plain Naan', price: 80, veg: 1 },
+  { category: 'Tandoor Se', name: 'Lachha Paratha', price: 80, veg: 1 },
+  { category: 'Tandoor Se', name: 'Makai Roti', price: 60, veg: 1 },
+  { category: 'Tandoor Se', name: 'Missi Roti', price: 60, veg: 1 },
+  { category: 'Tandoor Se', name: 'Bajra Roti', price: 60, veg: 1 },
+  { category: 'Tandoor Se', name: 'Tandoori Roti – Butter', price: 40, veg: 1 },
+  { category: 'Tandoor Se', name: 'Tandoori Roti – Plain', price: 30, veg: 1 },
+  { category: 'Tandoor Se', name: 'Tawa Roti – Butter', price: 30, veg: 1 },
+  { category: 'Tandoor Se', name: 'Tawa Roti – Plain', price: 25, veg: 1 },
+  { category: 'Dal', name: 'Dal Makhani Tadka', price: 220, veg: 1 },
+  { category: 'Dal', name: 'Dal Makhani', desc: 'Slow-cooked black lentils in butter and cream.', price: 210, veg: 1, bestseller: 1 },
+  { category: 'Dal', name: 'Dal Tadka', price: 200, veg: 1 },
+  { category: 'Dal', name: 'Dal Palak', price: 200, veg: 1 },
+  { category: 'Dal', name: 'Dal Fry', price: 150, veg: 1 },
+  { category: 'Rice', name: 'Matka Cheese Special Biryani', price: 280, veg: 1 },
+  { category: 'Rice', name: 'Kaju Pulav', price: 240, veg: 1 },
+  { category: 'Rice', name: 'Handi Biryani', price: 230, veg: 1 },
+  { category: 'Rice', name: 'Veg Hyderabadi Biryani', price: 230, veg: 1 },
+  { category: 'Rice', name: 'Paneer Pulav', price: 230, veg: 1 },
+  { category: 'Rice', name: 'Veg Biryani', price: 220, veg: 1 },
+  { category: 'Rice', name: 'Veg Pulav', price: 190, veg: 1 },
+  { category: 'Rice', name: 'Jeera Rice', price: 140, veg: 1 },
+  { category: 'Rice', name: 'Steam Rice', price: 120, veg: 1 },
+];
+
+const VARIANTS = {};
+for (const [name, maida, atta] of KULCHAS) {
+  VARIANTS[name] = [
+    { v: 'Maida', d: 0 },
+    ...(atta ? [{ v: 'Atta', d: atta - maida }] : []),
+    { v: 'Extra Butter', d: 10 },
+  ];
+}
+
+for (const m of MENU) {
+  if (m.bestseller === undefined) m.bestseller = 0;
+  if (m.desc === undefined) m.desc = '';
+}
 
 const STAFF = [
   { branch: 'alkapuri', user: 'kitchen_alkapuri', pass: 'kitchen123', role: 'kitchen' },
@@ -240,6 +400,7 @@ export async function seed() {
   const rows = (await pool.query('SELECT COUNT(*) AS n FROM branches')).rows;
   if (Number(rows[0].n) > 0) {
     await backfillTokens();
+    await syncMenu();
     return;
   }
 
@@ -252,8 +413,8 @@ export async function seed() {
     }
     for (const m of MENU) {
       const id = uid('mi');
-      await client.query('INSERT INTO menu_items (id,category,name,description,base_price,is_veg,bestseller) VALUES ($1,$2,$3,$4,$5,$6,$7)', [id, m.category, m.name, m.desc, m.price, m.veg, m.bestseller]);
-      for (const v of (VARIANTS[m.name] || [])) await client.query('INSERT INTO menu_item_variants (id,menu_item_id,variant_name,price_delta) VALUES ($1,$2,$3,$4)', [uid('var'), id, v.v, v.d]);
+      await client.query('INSERT INTO menu_items (id,category,name,description,base_price,is_veg,bestseller) VALUES ($1,$2,$3,$4,$5,$6,$7)', [id, m.category, m.name, m.desc, m.price * 100, m.veg, m.bestseller]);
+      for (const v of (VARIANTS[m.name] || [])) await client.query('INSERT INTO menu_item_variants (id,menu_item_id,variant_name,price_delta) VALUES ($1,$2,$3,$4)', [uid('var'), id, v.v, v.d * 100]);
     }
     for (const s of STAFF) {
       await client.query('INSERT INTO staff_accounts (id,branch_id,username,password_hash,role) VALUES ($1,$2,$3,$4,$5)', [uid('stf'), s.branch, s.user, hashPassword(s.pass), s.role]);
@@ -273,4 +434,40 @@ async function backfillTokens() {
   for (const t of missing) {
     await db.prepare('UPDATE tables SET token = ? WHERE id = ?').run(randomBytes(6).toString('hex'), t.id);
   }
+}
+
+// Keep the live menu in step with MENU/VARIANTS: insert new items, update prices,
+// hide removed items (history preserved via orders). No-op when nothing changed.
+async function syncMenu() {
+  const existing = await db.prepare('SELECT id, name FROM menu_items').all();
+  const names = new Set(existing.map(e => e.name));
+  const need = MENU.map(m => m.name);
+  const needSet = new Set(need);
+  const unchanged = need.every(n => names.has(n)) && existing.every(e => needSet.has(e.name));
+  if (unchanged) return;
+
+  await tx(async (client) => {
+    const byName = new Map(existing.map(e => [e.name, e.id]));
+    for (const m of MENU) {
+      const id = byName.get(m.name);
+      if (id) {
+        await q(client, 'UPDATE menu_items SET category=?, description=?, base_price=?, is_veg=?, bestseller=? WHERE id=?',
+          m.category, m.desc, m.price * 100, m.veg, m.bestseller, id);
+      } else {
+        const nid = uid('mi');
+        await q(client, 'INSERT INTO menu_items (id,category,name,description,base_price,is_veg,bestseller,available) VALUES (?,?,?,?,?,?,?,1)',
+          nid, m.category, m.name, m.desc, m.price * 100, m.veg, m.bestseller);
+        byName.set(m.name, nid);
+        existing.push({ id: nid, name: m.name });
+      }
+      const itemId = byName.get(m.name);
+      await q(client, 'DELETE FROM menu_item_variants WHERE menu_item_id=?', itemId);
+      for (const v of (VARIANTS[m.name] || [])) {
+        await q(client, 'INSERT INTO menu_item_variants (id,menu_item_id,variant_name,price_delta) VALUES (?,?,?,?)', uid('var'), itemId, v.v, v.d * 100);
+      }
+    }
+    for (const e of existing) {
+      if (!needSet.has(e.name)) await q(client, 'UPDATE menu_items SET available=0 WHERE id=?', e.id);
+    }
+  });
 }
