@@ -95,20 +95,20 @@ function card(order) {
   const total = order.items.reduce((s, i) => s + i.price_at_order * i.quantity, 0);
   return `
   <article class="bg-surface-bright border border-on-background/10 rounded-xl p-stack-sm flex flex-col gap-2 shadow-[0_2px_8px_rgba(43,33,28,0.02)] ${stale?'stale border-error/40':''}">
-    <div class="flex items-center justify-between">
-      <span class="font-headline-md text-primary text-[20px] leading-7">Table ${order.table_number}</span>
+    <div class="flex items-baseline justify-between gap-2">
+      <span class="font-label-bold text-[18px] text-on-background">Table ${order.table_number}</span>
       <span class="font-label-sm text-on-surface-variant">${ago(order.created_at)} ago</span>
     </div>
     ${stale ? `<span class="font-label-sm text-error flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">schedule</span> Waiting ${Math.floor(minutesOld)} min</span>` : ''}
     <div class="flex flex-col gap-1 flex-grow">
       ${order.items.map(i => `
-        <div class="flex items-center justify-between gap-2">
-          <span class="font-body-md text-on-background"><b>${i.quantity}x</b> ${esc(i.item_name)}${i.variant_name ? ` <span class="font-label-sm text-on-surface-variant">(${esc(i.variant_name)})</span>` : ''}</span>
-          <span class="font-label-sm text-on-surface-variant">${rs(i.price_at_order * i.quantity)}</span>
+        <div class="flex items-baseline justify-between gap-2">
+          <span class="font-body-md text-on-background">${i.quantity} × ${esc(i.item_name)}${i.variant_name ? ` · <span class="text-on-surface-variant">${esc(i.variant_name)}</span>` : ''}</span>
+          <span class="font-label-bold text-on-background whitespace-nowrap">${rs(i.price_at_order * i.quantity)}</span>
         </div>`).join('')}
     </div>
-    <div class="border-t border-outline/10 pt-2 flex items-center justify-between">
-      <span class="font-label-bold text-on-background">${rs(total)}</span>
+    <div class="border-t border-outline/10 pt-2 flex items-center justify-between gap-2">
+      <span class="font-label-bold text-[16px] text-on-background">${rs(total)}</span>
       <div class="flex gap-2">
         ${order.status !== 'new' && order.status !== 'delivered' ? `<button class="font-label-sm px-2 py-1 rounded border border-outline/30 text-on-surface-variant hover:bg-surface-dim" onclick="undo(${JSON.stringify(order).replace(/"/g,'&quot;')})" title="Undo (60s window)">Undo</button>` : ''}
         ${next ? `<button class="bg-primary text-on-primary font-label-bold px-4 py-2 rounded-lg flex items-center gap-1" onclick="advance(${JSON.stringify(order).replace(/"/g,'&quot;')})">${nextLabel} <span class="material-symbols-outlined text-[16px]">arrow_forward</span></button>` : ''}
