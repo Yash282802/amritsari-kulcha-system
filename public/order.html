@@ -207,7 +207,7 @@ function refreshCart() {
 function openSheet() { state.sheetOpen = true; renderSheet(); }
 function closeSheet() { state.sheetOpen = false; $('sheet-root').innerHTML = ''; }
 function renderSheet() {
-  const subtotal = state.cart.reduce((s, c) => s + c.qty * c.item.basePrice, 0);
+  const subtotal = state.cart.reduce((s, c) => s + c.qty * c.item.base_price, 0);
   const gst = Math.round(subtotal * 5 / 100);
   const charges = 1500;
   const total = subtotal + gst + charges;
@@ -238,7 +238,7 @@ function renderSheet() {
                 </div>
               </div>
             </div>
-            <span class="font-body-md font-medium text-on-background pl-gutter">${rs(c.qty * c.item.basePrice)}</span>
+            <span class="font-body-md font-medium text-on-background pl-gutter">${rs(c.qty * c.item.base_price)}</span>
           </div>`).join('')}
         <button class="flex items-center gap-2 text-primary font-label-bold w-fit mt-stack-sm hover:opacity-80" onclick="closeSheet()"><span class="material-symbols-outlined text-[18px]">add</span> Add more items</button>
       </div>
