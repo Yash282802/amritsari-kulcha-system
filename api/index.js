@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
-import { db, pool, tx, q, seed, uid, verifyPassword, getTaxRate, getServiceCharge, setSetting } from '../db.js';
+import { db, tx, q, seed, uid, verifyPassword, getTaxRate, getServiceCharge, setSetting } from '../db.js';
 import { sendTemplate } from '../wa.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -14,10 +14,15 @@ const SESSION_TTL = 12 * 60 * 60 * 1000;
 await seed();
 
 // ---------- Sessions (DB-backed — survives serverless cold starts) ----------
-async function createSession(staff, res) {
+const cookieFlags = (req) => {
+  const secure = !!req.socket.encrypted || req.headers['x-forwarded-proto'] === 'https';
+  return `HttpOnly; SameSite=Strict; Path=/${secure ? '; Secure' : ''}`;
+};
+
+async function createSession(staff, req, res) {
   const token = randomBytes(32).toString('hex');
   await db.prepare('INSERT INTO sessions (token, staff_id, exp) VALUES (?,?,?)').run(token, staff.id, Date.now() + SESSION_TTL);
-  res.setHeader('Set-Cookie', `sid=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL / 1000}`);
+  res.setHeader('Set-Cookie', `sid=${token}; ${cookieFlags(req)}; Max-Age=${SESSION_TTL / 1000}`);
 }
 
 async function getSession(req) {
@@ -27,7 +32,7 @@ async function getSession(req) {
   const s = await db.prepare(`
     SELECT s.token, s.staff_id, s.exp, st.username, st.role, st.branch_id
     FROM sessions s JOIN staff_accounts st ON st.id = s.staff_id
-    WHERE s.token = ?
+    WHERE s.token = ? AND st.active = 1
   `).get(token);
   if (!s) return null;
   if (Date.now() > Number(s.exp)) {
@@ -35,6 +40,20 @@ async function getSession(req) {
     return null;
   }
   return { token, staffId: s.staff_id, username: s.username, role: s.role, branchId: s.branch_id, exp: Number(s.exp) };
+}
+
+// ---------- Order rate limiting (per table — a valid QR token must not allow spam) ----------
+// ponytail: in-memory, per-process; fine on the single Render instance, move to DB if multi-instance.
+const ORDER_RATE_MAX = 10;
+const ORDER_RATE_WINDOW = 60 * 1000;
+const orderRate = new Map();
+function orderRateLimited(tableId) {
+  const now = Date.now();
+  const recent = (orderRate.get(tableId) || []).filter(t => now - t < ORDER_RATE_WINDOW);
+  if (recent.length >= ORDER_RATE_MAX) return true;
+  recent.push(now);
+  orderRate.set(tableId, recent);
+  return false;
 }
 
 // ---------- Login rate limiting (DB-backed) ----------
@@ -50,15 +69,14 @@ async function checkRateLimit(ip) {
   return { allowed: true };
 }
 async function recordFailure(ip) {
-  await db.prepare('INSERT INTO login_attempts (ip, count) VALUES (?,1) ON CONFLICT (ip) DO UPDATE SET count = login_attempts.count + 1').run(ip);
+  await db.prepare("INSERT INTO login_attempts (ip, count, updated_at) VALUES (?,1,(now() AT TIME ZONE 'UTC')) ON CONFLICT (ip) DO UPDATE SET count = login_attempts.count + 1, updated_at = (now() AT TIME ZONE 'UTC')").run(ip);
   const r = await db.prepare('SELECT * FROM login_attempts WHERE ip = ?').get(ip);
   if (r.count >= MAX_ATTEMPTS) {
-    await db.prepare('UPDATE login_attempts SET lock_until = ?, count = 0 WHERE ip = ?').run(Date.now() + LOCK_MS, ip);
+    await db.prepare("UPDATE login_attempts SET lock_until = ?, count = 0, updated_at = (now() AT TIME ZONE 'UTC') WHERE ip = ?").run(Date.now() + LOCK_MS, ip);
   }
 }
 
 // ---------- Helpers ----------
-const money = (p) => `₹${(p / 100).toFixed(2)}`;
 const send = (res, status, body) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
 const ok = (res, data) => send(res, 200, { success: true, data });
 const err = (res, code, message, status = 400) => send(res, status, { success: false, error: { code, message } });
@@ -75,7 +93,12 @@ const branchScope = (s, branchId) => {
 };
 const checkOrigin = (req, res) => {
   const origin = req.headers.origin || req.headers.referer || '';
-  if (origin && !origin.includes(req.headers.host)) { err(res, 'CSRF', 'Forbidden', 403); return false; }
+  if (!origin) return true;
+  try {
+    const o = new URL(origin);
+    const host = new URL(`http://${req.headers.host}`).hostname;
+    if (o.hostname !== host) { err(res, 'CSRF', 'Forbidden', 403); return false; }
+  } catch { err(res, 'CSRF', 'Forbidden', 403); return false; }
   return true;
 };
 
@@ -129,7 +152,16 @@ async function notifyInvoice(bill) {
 
 // Review request: once per phone + date, ~24h after payment.
 // No background process on Render free — runs lazily on staff page polls.
+let lastSweep = 0;
+async function sweepStale() {
+  const now = Date.now();
+  if (now - lastSweep < 3600e3) return;
+  lastSweep = now;
+  await db.prepare('DELETE FROM sessions WHERE exp < ?').run(now);
+  await db.prepare("DELETE FROM login_attempts WHERE updated_at IS NULL OR updated_at < (now() AT TIME ZONE 'UTC') - interval '24 hours'").run();
+}
 async function reviewJob() {
+  await sweepStale();
   const due = await db.prepare(`
     SELECT b.id, b.customer_phone, br.name AS branch_name, br.review_link,
       substr(b.paid_at::text,1,10) AS paid_date FROM bills b
@@ -258,7 +290,9 @@ export default async function handler(req, res) {
     if (t.locked || Number(pending.n) > 0) {
       return err(res, 'TABLE_LOCKED', 'This table is currently being billed. Please ask staff.');
     }
+    if (orderRateLimited(t.id)) return err(res, 'RATE_LIMITED', 'Too many orders from this table. Please wait a minute.', 429);
     if (!Array.isArray(body.items) || body.items.length === 0) return err(res, 'BAD_REQUEST', 'No items in order');
+    if (body.items.length > 100) return err(res, 'BAD_REQUEST', 'Too many line items');
 
     const orderId = uid('ord');
     try {
@@ -272,7 +306,7 @@ export default async function handler(req, res) {
             const v = (await q(client, 'SELECT * FROM menu_item_variants WHERE id = ? AND menu_item_id = ?', it.variantId, it.itemId)).rows[0];
             if (v) variantPrice = Number(v.price_delta);
           }
-          const qty = Math.max(1, Math.floor(Number(it.quantity) || 1));
+          const qty = Math.min(99, Math.max(1, Math.floor(Number(it.quantity) || 1)));
           await q(client, 'INSERT INTO order_items (id, order_id, menu_item_id, variant_id, quantity, price_at_order) VALUES (?,?,?,?,?,?)',
             uid('oi'), orderId, it.itemId, it.variantId || null, qty, Number(item.base_price) + variantPrice);
         }
@@ -318,7 +352,7 @@ export default async function handler(req, res) {
       return err(res, 'BAD_CREDENTIALS', 'Invalid username or password');
     }
     await db.prepare('DELETE FROM login_attempts WHERE ip = ?').run(ip);
-    await createSession(staff, res);
+    await createSession(staff, req, res);
     return ok(res, { username: staff.username, role: staff.role, branchId: staff.branch_id });
   }
 
@@ -330,7 +364,7 @@ export default async function handler(req, res) {
   if (method === 'POST' && pathname === '/api/auth/logout') {
     const s = await getSession(req);
     if (s) await db.prepare('DELETE FROM sessions WHERE token = ?').run(s.token);
-    res.setHeader('Set-Cookie', 'sid=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
+    res.setHeader('Set-Cookie', `sid=; ${cookieFlags(req)}; Max-Age=0`);
     return ok(res, {});
   }
 
@@ -360,7 +394,7 @@ export default async function handler(req, res) {
     await reviewJob();
     const status = searchParams.get('status');
     const rows = status
-      ? await db.prepare('SELECT id FROM orders WHERE branch_id = ? AND status = ? ORDER BY created_at').all(branch, status)
+      ? await db.prepare('SELECT id FROM orders WHERE branch_id = ? AND status = ? ORDER BY created_at LIMIT 100').all(branch, status)
       : await db.prepare('SELECT id FROM orders WHERE branch_id = ? ORDER BY created_at DESC LIMIT 100').all(branch);
     const orders = [];
     for (const r of rows) orders.push(await orderWithItems(r.id));
@@ -428,7 +462,7 @@ export default async function handler(req, res) {
     const existing = await db.prepare("SELECT * FROM bills WHERE table_id = ? AND payment_status = 'pending'").get(table.id);
     if (existing) return ok(res, await getBill(existing.id));
 
-    const delivered = await db.prepare("SELECT id FROM orders WHERE table_id = ? AND status = 'delivered'").all(table.id);
+    const delivered = await db.prepare("SELECT id FROM orders WHERE table_id = ? AND status = 'delivered' AND id NOT IN (SELECT order_id FROM bill_orders)").all(table.id);
     if (delivered.length === 0) return err(res, 'NO_DELIVERED', 'No delivered orders to bill for this table');
 
     const taxRate = await getTaxRate();
@@ -474,14 +508,15 @@ export default async function handler(req, res) {
 
     try {
       await tx(async (client) => {
-        await q(client, "UPDATE bills SET payment_status = 'paid', payment_method = ?, customer_phone = ?, paid_at = (now() AT TIME ZONE 'UTC') WHERE id = ?",
+        const r = await q(client, "UPDATE bills SET payment_status = 'paid', payment_method = ?, customer_phone = ?, paid_at = (now() AT TIME ZONE 'UTC') WHERE id = ? AND payment_status = 'pending'",
           methodPay, phone || null, billId);
+        if (r.rowCount === 0) throw { code: 'ALREADY_PAID', message: 'Bill already paid' };
         await q(client, "UPDATE tables SET status = 'available', locked = 0 WHERE id = ?", bill.table_id);
       });
-    } catch (e) { return err(res, 'PAY_FAILED', 'Could not mark bill paid'); }
+    } catch (e) { return err(res, e.code || 'PAY_FAILED', e.message || 'Could not mark bill paid'); }
 
     const paid = await getBill(billId);
-    await notifyInvoice(paid); // sends WhatsApp bill, retries once on failure
+    notifyInvoice(paid).catch(e => console.error('[notify]', e.message)); // don't block the response on a Meta API call
     return ok(res, paid);
   }
 
@@ -502,15 +537,17 @@ export default async function handler(req, res) {
     if (!s || s.role !== 'admin') return err(res, 'FORBIDDEN', 'Admin only', 403);
     const period = searchParams.get('period') || 'week';
     const branch = searchParams.get('branch');
-    const days = { day: 1, week: 7, month: 30 }[period] || 7;
-    const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+    // Calendar periods in IST — paid_at is stored in UTC, so convert before truncating.
+    const trunc = { day: 'day', week: 'week', month: 'month' }[period] || 'week';
+    const since = (await db.prepare(`SELECT date_trunc('${trunc}', now() AT TIME ZONE 'Asia/Kolkata')::date AS since`).get())?.since;
     const rows = await db.prepare(`
       SELECT b.branch_id, br.name AS branch_name, COUNT(*) AS bill_count, SUM(b.total) AS revenue
       FROM bills b JOIN branches br ON br.id = b.branch_id
-      WHERE b.payment_status = 'paid' AND substr(b.paid_at::text,1,10) >= ?
+      WHERE b.payment_status = 'paid'
+        AND (b.paid_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata' >= date_trunc('${trunc}', now() AT TIME ZONE 'Asia/Kolkata')
       ${branch ? 'AND b.branch_id = ?' : ''}
       GROUP BY b.branch_id, br.name
-    `).all(since, ...(branch ? [branch] : []));
+    `).all(...(branch ? [branch] : []));
     const total = rows.reduce((sum, r) => sum + Number(r.revenue || 0), 0);
     return ok(res, { period, since, byBranch: rows, totalOrders: rows.reduce((sum, r) => sum + Number(r.bill_count), 0), totalRevenue: total });
   }
@@ -526,8 +563,10 @@ export default async function handler(req, res) {
     const s = await staffSession(req, res);
     if (!s || s.role !== 'admin') return err(res, 'FORBIDDEN', 'Admin only', 403);
     const body = await readBody(req);
-    if (body.taxRate != null && body.taxRate >= 0) await setSetting('tax_rate', String(body.taxRate));
-    if (body.serviceCharge != null && body.serviceCharge >= 0) await setSetting('service_charge', String(body.serviceCharge));
+    const taxRate = Number(body.taxRate);
+    const serviceCharge = Number(body.serviceCharge);
+    if (body.taxRate != null && taxRate >= 0 && taxRate <= 100) await setSetting('tax_rate', String(taxRate));
+    if (body.serviceCharge != null && serviceCharge >= 0 && serviceCharge <= 100000) await setSetting('service_charge', String(serviceCharge));
     return ok(res, { taxRate: await getTaxRate(), serviceCharge: await getServiceCharge() });
   }
 

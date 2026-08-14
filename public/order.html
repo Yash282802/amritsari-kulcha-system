@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <meta name="theme-color" content="#5c091c"/>
 <title>Amritsari Kulcha — Order at your table</title>
 <script src="https://cdn.tailwindcss.com"></script>
@@ -70,6 +70,7 @@ const BRANCH = path[1], TABLE = path[2];
 const TOKEN = new URLSearchParams(location.search).get('t') || '';
 const API = '/api';
 const rs = (n) => `₹${(n/100).toFixed(2)}`;
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 document.getElementById('table-badge').textContent = `Table ${TABLE}`;
 
@@ -99,13 +100,13 @@ function render() {
   if (!state.active) state.active = m.categories[0];
   // pills
   $('category-pills').innerHTML = m.categories.map(c =>
-    `<button data-cat="${c}" onclick="selectCat('${c}')" class="font-label-bold px-4 py-2 rounded-full whitespace-nowrap transition-colors ${c===state.active?'bg-primary text-on-primary':'bg-surface-bright border border-outline/20 text-on-surface hover:bg-surface-dim'}">${c}</button>`
+    `<button data-cat="${esc(c)}" onclick="selectCat(this.dataset.cat)" class="font-label-bold px-4 py-2 rounded-full whitespace-nowrap transition-colors ${c===state.active?'bg-primary text-on-primary':'bg-surface-bright border border-outline/20 text-on-surface hover:bg-surface-dim'}">${esc(c)}</button>`
   ).join('');
   // current category only
   const items = m.items.filter(i => i.category === state.active);
   $('menu').innerHTML = `
     <div class="flex items-center gap-unit">
-      <h2 class="font-headline-md text-primary">${state.active}</h2>
+      <h2 class="font-headline-md text-primary">${esc(state.active)}</h2>
       <div class="h-px flex-grow bg-outline/20"></div>
       <span class="font-label-sm text-on-surface-variant">${items.length} items</span>
     </div>
@@ -121,8 +122,8 @@ function cardHtml(item) {
     ${isBest ? `<div class="absolute top-2 -right-6 bg-secondary-container text-on-secondary-container font-label-sm text-[10px] px-6 py-0.5 rotate-45 shadow-sm z-10 font-bold uppercase tracking-wider border border-secondary/20">Bestseller</div>` : ''}
     <div class="flex flex-col justify-between flex-grow">
       <div>
-        <h3 class="font-headline-md text-body-lg text-on-background font-semibold ${isBest?'pr-4':''}">${item.name}</h3>
-        <p class="font-body-md text-body-md text-on-surface-variant mt-1 line-clamp-2">${item.description || ''}</p>
+        <h3 class="font-headline-md text-body-lg text-on-background font-semibold ${isBest?'pr-4':''}">${esc(item.name)}</h3>
+        <p class="font-body-md text-body-md text-on-surface-variant mt-1 line-clamp-2">${esc(item.description || '')}</p>
         ${item.variants.length ? `<div class="flex gap-2 mt-2 hide-scrollbar overflow-x-auto" id="variants-${item.id}">${variantChips(item)}</div>` : ''}
       </div>
       <div class="flex justify-between items-center mt-stack-sm">
@@ -136,7 +137,7 @@ function cardHtml(item) {
 let selectedVariant = {};
 function variantChips(item) {
   return item.variants.map((v, i) =>
-    `<button data-vi="${v.id}" onclick="pickVariant('${item.id}','${v.id}',${v.priceDelta})" class="font-label-sm px-2.5 py-1 rounded border transition-colors ${i===0?'border-primary text-primary bg-primary/5':'border-outline/30 text-on-surface-variant'} whitespace-nowrap">${v.name}${v.priceDelta?' +'+rs(v.priceDelta):''}</button>`
+    `<button data-vi="${v.id}" onclick="pickVariant('${item.id}','${v.id}',${v.priceDelta})" class="font-label-sm px-2.5 py-1 rounded border transition-colors ${i===0?'border-primary text-primary bg-primary/5':'border-outline/30 text-on-surface-variant'} whitespace-nowrap">${esc(v.name)}${v.priceDelta?' +'+rs(v.priceDelta):''}</button>`
   ).join('');
 }
 function pickVariant(itemId, variantId, delta) {
@@ -158,12 +159,6 @@ function stepper(itemId, qty) {
   </div>`;
 }
 
-function cartEntry(itemId) {
-  const item = state.menu.items.find(i => i.id === itemId);
-  const v = selectedVariant[itemId] || {};
-  const key = itemId + '|' + (v.variantId || '');
-  return { item, variantId: v.variantId || null, variantName: v.variantName || item.variants[0]?.name, qty: 1, key };
-}
 function qtyOf(itemId) {
   const v = selectedVariant[itemId] || {};
   const key = itemId + '|' + (v.variantId || '');
@@ -179,7 +174,7 @@ function add(itemId) {
   const item = state.menu.items.find(i => i.id === itemId);
   const idx = findIdx(itemId);
   if (idx >= 0) { state.cart[idx].qty++; } else {
-    state.cart.push({ item, variantId: v?.variantId || null, variantName: v ? item.variants.find(x => x.id === v.variantId)?.name : item.variants[0]?.name || null, qty: 1, key: itemId + '|' + (v?.variantId || '') });
+    state.cart.push({ item, variantId: v?.variantId || null, variantName: v ? item.variants.find(x => x.id === v.variantId)?.name : item.variants[0]?.name || null, delta: v?.delta || 0, qty: 1, key: itemId + '|' + (v?.variantId || '') });
   }
   refreshCart();
 }
@@ -192,7 +187,7 @@ function dec(itemId) {
 }
 function refreshCart() {
   const count = state.cart.reduce((s, c) => s + c.qty, 0);
-  const subtotal = state.cart.reduce((s, c) => s + c.qty * c.item.base_price, 0);
+  const subtotal = state.cart.reduce((s, c) => s + c.qty * (c.item.base_price + (c.delta || 0)), 0);
   $('cart-count').textContent = `${count} Item${count!==1?'s':''} added`;
   $('cart-subtotal').textContent = `${rs(subtotal)} plus taxes`;
   $('cart-bar').classList.toggle('hidden', count === 0);
@@ -207,7 +202,7 @@ function refreshCart() {
 function openSheet() { state.sheetOpen = true; renderSheet(); }
 function closeSheet() { state.sheetOpen = false; $('sheet-root').innerHTML = ''; }
 function renderSheet() {
-  const subtotal = state.cart.reduce((s, c) => s + c.qty * c.item.base_price, 0);
+  const subtotal = state.cart.reduce((s, c) => s + c.qty * (c.item.base_price + (c.delta || 0)), 0);
   const gst = Math.round(subtotal * 5 / 100);
   const charges = 1500;
   const total = subtotal + gst + charges;
@@ -229,8 +224,8 @@ function renderSheet() {
             <div class="flex gap-gutter">
               <div class="w-8 h-8 rounded border border-outline/20 flex items-center justify-center bg-surface-bright font-label-bold text-primary flex-shrink-0">${c.qty}x</div>
               <div class="flex flex-col">
-                <span class="font-headline-md text-[20px] leading-[28px] text-on-background font-semibold">${c.item.name}</span>
-                ${c.variantName ? `<span class="font-label-sm text-on-surface-variant mt-1">${c.variantName}</span>` : ''}
+                <span class="font-headline-md text-[20px] leading-[28px] text-on-background font-semibold">${esc(c.item.name)}</span>
+                ${c.variantName ? `<span class="font-label-sm text-on-surface-variant mt-1">${esc(c.variantName)}</span>` : ''}
                 <div class="flex items-center gap-2 mt-2">
                   <button class="text-primary" onclick="dec('${c.item.id}')"><span class="material-symbols-outlined text-[18px]">remove</span></button>
                   <span class="font-label-bold text-primary">${c.qty}</span>
@@ -238,7 +233,7 @@ function renderSheet() {
                 </div>
               </div>
             </div>
-            <span class="font-body-md font-medium text-on-background pl-gutter">${rs(c.qty * c.item.base_price)}</span>
+            <span class="font-body-md font-medium text-on-background pl-gutter">${rs(c.qty * (c.item.base_price + (c.delta || 0)))}</span>
           </div>`).join('')}
         <button class="flex items-center gap-2 text-primary font-label-bold w-fit mt-stack-sm hover:opacity-80" onclick="closeSheet()"><span class="material-symbols-outlined text-[18px]">add</span> Add more items</button>
       </div>

@@ -73,7 +73,10 @@ function ago(ts) {
   return `${Math.floor(s/3600)}h`;
 }
 
-async function advance(order) {
+function orderById(id) { return orders.find(o => o.id === id); }
+async function advance(id) {
+  const order = orderById(id);
+  if (!order) return;
   const r = await fetch(`/api/orders/${order.id}/status`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status: order.status === 'ready' ? 'delivered' : order.status === 'preparing' ? 'ready' : 'preparing' })
@@ -81,7 +84,9 @@ async function advance(order) {
   const j = await r.json();
   if (!j.success) alert(j.error.message);
 }
-async function undo(order) {
+async function undo(id) {
+  const order = orderById(id);
+  if (!order) return;
   const r = await fetch(`/api/orders/${order.id}/undo`, { method: 'POST' });
   const j = await r.json();
   if (!j.success) alert(j.error.message);
@@ -110,8 +115,8 @@ function card(order) {
     <div class="border-t border-outline/10 pt-2 flex items-center justify-between gap-2">
       <span class="font-label-bold text-[16px] text-on-background">${rs(total)}</span>
       <div class="flex gap-2">
-        ${order.status !== 'new' && order.status !== 'delivered' ? `<button class="font-label-sm px-2 py-1 rounded border border-outline/30 text-on-surface-variant hover:bg-surface-dim" onclick="undo(${JSON.stringify(order).replace(/"/g,'&quot;')})" title="Undo (60s window)">Undo</button>` : ''}
-        ${next ? `<button class="bg-primary text-on-primary font-label-bold px-4 py-2 rounded-lg flex items-center gap-1" onclick="advance(${JSON.stringify(order).replace(/"/g,'&quot;')})">${nextLabel} <span class="material-symbols-outlined text-[16px]">arrow_forward</span></button>` : ''}
+        ${order.status !== 'new' && order.status !== 'delivered' ? `<button class="font-label-sm px-2 py-1 rounded border border-outline/30 text-on-surface-variant hover:bg-surface-dim" onclick="undo('${order.id}')" title="Undo (60s window)">Undo</button>` : ''}
+        ${next ? `<button class="bg-primary text-on-primary font-label-bold px-4 py-2 rounded-lg flex items-center gap-1" onclick="advance('${order.id}')">${nextLabel} <span class="material-symbols-outlined text-[16px]">arrow_forward</span></button>` : ''}
       </div>
     </div>
   </article>`;

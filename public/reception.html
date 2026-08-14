@@ -36,25 +36,19 @@
 <script>
 let session = null, tables = [];
 const rs = n => `₹${(n/100).toFixed(2)}`;
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 async function init() {
   const me = await fetch('/api/auth/me').then(r => r.json());
   if (!me.success) return location.href = '/login';
   session = me.data;
   document.getElementById('branch-name').textContent = `· ${session.branchId}`;
-  connect();
   await loadTables();
   setInterval(loadTables, 10000);
 }
 async function loadTables() {
   const r = await fetch(`/api/tables?branch=${session.branchId}`).then(x => x.json());
   if (r.success) { tables = r.data; renderTables(); }
-}
-function connect() {
-  const es = new EventSource(`/api/events?branch=${session.branchId}`);
-  es.addEventListener('table_updated', () => loadTables());
-  es.addEventListener('bill_updated', () => loadTables());
-  es.addEventListener('order_created', () => loadTables());
 }
 
 function tableCard(t) {
@@ -69,7 +63,7 @@ function tableCard(t) {
       ? `<span class="font-label-sm text-secondary flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">receipt_long</span> Bill pending</span>`
       : `<span class="font-label-sm text-on-surface-variant/60">Available</span>`;
   return `
-  <button onclick="openTable(${JSON.stringify(t).replace(/"/g,'&quot;')})"
+  <button onclick="openTable('${t.id}')"
     class="border rounded-xl p-4 flex flex-col items-center gap-1 transition-all hover:shadow-md ${cls}">
     <span class="material-symbols-outlined text-[22px]">table_restaurant</span>
     <span class="font-headline-md text-[22px] leading-7">${t.table_number}</span>
@@ -80,7 +74,9 @@ function renderTables() {
   document.getElementById('tables').innerHTML = tables.map(tableCard).join('');
 }
 
-function openTable(t) {
+function openTable(id) {
+  const t = tables.find(x => x.id === id);
+  if (!t) return;
   document.getElementById('drawer-root').innerHTML = `
   <div class="fixed inset-0 bg-on-background/40 z-40" onclick="closeDrawer()"></div>
   <div class="slide-up fixed bottom-0 left-0 right-0 max-w-[720px] mx-auto bg-background-cream rounded-t-[24px] shadow-xl z-50 flex flex-col max-h-[90vh]">
@@ -97,10 +93,9 @@ function openTable(t) {
 }
 
 async function loadTableDetail(t) {
-  const orders = (await fetch(`/api/orders?branch=${session.branchId}`).then(x => x.json())).data
-    .filter(o => o.table_id === t.id && o.status !== 'delivered' && o.status !== 'new');
-  const delivered = (await fetch(`/api/orders?branch=${session.branchId}`).then(x => x.json())).data
-    .filter(o => o.table_id === t.id && o.status === 'delivered');
+  const all = (await fetch(`/api/orders?branch=${session.branchId}`).then(x => x.json())).data;
+  const orders = all.filter(o => o.table_id === t.id && o.status !== 'delivered' && o.status !== 'new');
+  const delivered = all.filter(o => o.table_id === t.id && o.status === 'delivered');
 
   // pending bill
   const pending = t.pendingBills && t.pendingBills[0];
@@ -114,7 +109,7 @@ async function loadTableDetail(t) {
         <span class="font-label-bold text-on-surface-variant">${o.status} · ${o.created_at}</span>
         <span class="font-label-sm text-on-surface-variant">${o.id.slice(-6)}</span>
       </div>
-      ${o.items.map(i => `<div class="flex justify-between mt-1"><span>${i.quantity}x ${i.item_name}</span><span class="font-label-sm">${rs(i.price_at_order*i.quantity)}</span></div>`).join('')}
+      ${o.items.map(i => `<div class="flex justify-between mt-1"><span>${i.quantity}x ${esc(i.item_name)}${i.variant_name ? ` (${esc(i.variant_name)})` : ''}</span><span class="font-label-sm">${rs(i.price_at_order*i.quantity)}</span></div>`).join('')}
     </div>`;
   el.innerHTML = `
     <h3 class="font-label-bold uppercase tracking-wider text-on-surface-variant mb-2">In progress</h3>
@@ -152,7 +147,7 @@ async function renderBillView(billId, t) {
       </div>
       <p class="font-label-sm text-on-surface-variant mb-2">Table ${bill.table_number} · ${bill.branch_name} · ${bill.created_at}</p>
       <div class="flex flex-col gap-1.5">
-        ${bill.lines.map(l => `<div class="flex justify-between"><span>${l.quantity}x ${l.name}</span><span>${rs(l.price_at_order*l.quantity)}</span></div>`).join('')}
+        ${bill.lines.map(l => `<div class="flex justify-between"><span>${l.quantity}x ${esc(l.name)}</span><span>${rs(l.price_at_order*l.quantity)}</span></div>`).join('')}
       </div>
       <div class="border-t border-dashed border-outline/30 my-3 pt-2 flex flex-col gap-1 font-body-md text-on-surface-variant">
         <div class="flex justify-between"><span>Subtotal</span><span>${rs(bill.subtotal)}</span></div>

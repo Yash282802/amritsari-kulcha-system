@@ -178,9 +178,26 @@ const SCHEMA = `
     count INTEGER NOT NULL DEFAULT 0,
     lock_until BIGINT
   );
+  ALTER TABLE login_attempts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP;
 
   CREATE INDEX IF NOT EXISTS idx_orders_queue ON orders(branch_id, status);
   CREATE INDEX IF NOT EXISTS idx_bills_pay ON bills(payment_status, branch_id);
+
+  -- RLS deny-all: the app connects as postgres (superuser, RLS-bypassed); these
+  -- lock out the anon/authenticated roles (PostgREST) which the app never uses.
+  ALTER TABLE branches ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE tables ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE menu_items ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE menu_item_variants ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE bills ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE bill_orders ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE staff_accounts ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE notification_log ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE login_attempts ENABLE ROW LEVEL SECURITY;
 `;
 
 export function uid(prefix) {
