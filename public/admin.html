@@ -33,8 +33,10 @@
 
 <main class="max-w-[1200px] mx-auto px-container-margin py-stack-md">
   <section id="tab-revenue">
-    <div class="flex gap-2 mb-4">
-      ${['day','week','month'].map(p => `<button class="per-btn font-label-bold px-4 py-2 rounded-full border ${p==='week'?'bg-primary text-on-primary border-primary':'bg-surface-bright border-outline/20 text-on-surface'}" data-p="${p}" onclick="loadRevenue('${p}')">${p==='day'?'Today':p==='week'?'Last 7 days':'Last 30 days'}</button>`).join('')}
+    <div class="grid grid-cols-3 gap-1 p-1 bg-surface-container rounded-full mb-4">
+      <button class="per-btn font-label-bold px-2 py-2 rounded-full text-on-surface-variant" data-p="day" onclick="loadRevenue('day')">Today</button>
+      <button class="per-btn font-label-bold px-2 py-2 rounded-full bg-primary text-on-primary" data-p="week" onclick="loadRevenue('week')">7 days</button>
+      <button class="per-btn font-label-bold px-2 py-2 rounded-full text-on-surface-variant" data-p="month" onclick="loadRevenue('month')">30 days</button>
     </div>
     <div id="revenue-cards" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6"></div>
     <div class="bg-surface-bright border border-on-background/10 rounded-xl overflow-hidden">
@@ -95,8 +97,8 @@ function tab(name, btn) {
 
 async function loadRevenue(period) {
   document.querySelectorAll('.per-btn').forEach(b => b.className = b.dataset.p === period
-    ? 'per-btn font-label-bold px-4 py-2 rounded-full bg-primary text-on-primary border border-primary'
-    : 'per-btn font-label-bold px-4 py-2 rounded-full bg-surface-bright border border-outline/20 text-on-surface');
+    ? 'per-btn font-label-bold px-2 py-2 rounded-full bg-primary text-on-primary'
+    : 'per-btn font-label-bold px-2 py-2 rounded-full text-on-surface-variant');
   const r = await fetch(`/api/admin/revenue?period=${period}`).then(x => x.json());
   if (!r.success) return;
   const d = r.data;
