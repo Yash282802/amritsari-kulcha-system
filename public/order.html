@@ -96,26 +96,23 @@ setInterval(loadMenu, 30000);
 function render() {
   $('state').innerHTML = '';
   const m = state.menu;
+  if (!state.active) state.active = m.categories[0];
   // pills
-  $('category-pills').innerHTML = m.categories.map((c, i) =>
-    `<button data-cat="${c}" onclick="jump('${c}')" class="font-label-bold px-4 py-2 rounded-full whitespace-nowrap transition-colors ${i===0?'bg-primary text-on-primary':'bg-surface-bright border border-outline/20 text-on-surface hover:bg-surface-dim'}">${c}</button>`
+  $('category-pills').innerHTML = m.categories.map(c =>
+    `<button data-cat="${c}" onclick="selectCat('${c}')" class="font-label-bold px-4 py-2 rounded-full whitespace-nowrap transition-colors ${c===state.active?'bg-primary text-on-primary':'bg-surface-bright border border-outline/20 text-on-surface hover:bg-surface-dim'}">${c}</button>`
   ).join('');
-  // menu sections
-  $('menu').innerHTML = m.categories.map(cat => {
-    const items = m.items.filter(i => i.category === cat);
-    if (!items.length) return '';
-    return `
-      <section id="cat-${cat}" class="flex flex-col gap-stack-sm">
-        <div class="flex items-center gap-unit mt-stack-md">
-          <h2 class="font-headline-md text-primary">${cat}</h2>
-          <div class="h-px flex-grow bg-outline/20"></div>
-        </div>
-        ${items.map(cardHtml).join('')}
-      </section>`;
-  }).join('');
+  // current category only
+  const items = m.items.filter(i => i.category === state.active);
+  $('menu').innerHTML = `
+    <div class="flex items-center gap-unit">
+      <h2 class="font-headline-md text-primary">${state.active}</h2>
+      <div class="h-px flex-grow bg-outline/20"></div>
+      <span class="font-label-sm text-on-surface-variant">${items.length} items</span>
+    </div>
+    ${items.map(cardHtml).join('')}`;
 }
 
-function jump(cat) { document.getElementById('cat-' + cat)?.scrollIntoView({ behavior: 'smooth' }); }
+function selectCat(cat) { state.active = cat; render(); window.scrollTo({ top: 0 }); }
 
 function cardHtml(item) {
   const isBest = item.bestseller;
