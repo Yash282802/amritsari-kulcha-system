@@ -83,6 +83,7 @@ const SCHEMA = `
     locked INTEGER NOT NULL DEFAULT 0,
     UNIQUE(branch_id, table_number)
   );
+  ALTER TABLE tables ADD COLUMN IF NOT EXISTS token TEXT;
 
   CREATE TABLE IF NOT EXISTS menu_items (
     id TEXT PRIMARY KEY,
@@ -237,7 +238,10 @@ const STAFF = [
 export async function seed() {
   await db.exec(SCHEMA);
   const rows = (await pool.query('SELECT COUNT(*) AS n FROM branches')).rows;
-  if (Number(rows[0].n) > 0) return;
+  if (Number(rows[0].n) > 0) {
+    await backfillTokens();
+    return;
+  }
 
   const client = await pool.connect();
   try {
@@ -260,5 +264,13 @@ export async function seed() {
     throw e;
   } finally {
     client.release();
+  }
+  await backfillTokens();
+}
+
+async function backfillTokens() {
+  const missing = await db.prepare("SELECT id FROM tables WHERE token IS NULL OR token = ''").all();
+  for (const t of missing) {
+    await db.prepare('UPDATE tables SET token = ? WHERE id = ?').run(randomBytes(6).toString('hex'), t.id);
   }
 }

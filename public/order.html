@@ -67,6 +67,7 @@
 const state = { menu: null, cart: [], sheetOpen: false };
 const path = location.pathname.match(/^\/b\/([\w-]+)\/(\d+)$/);
 const BRANCH = path[1], TABLE = path[2];
+const TOKEN = new URLSearchParams(location.search).get('t') || '';
 const API = '/api';
 const rs = (n) => `₹${(n/100).toFixed(2)}`;
 
@@ -280,7 +281,7 @@ async function placeOrder() {
   try {
     const r = await fetch('/api/orders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ branch: BRANCH, tableNumber: Number(TABLE), items: state.cart.map(c => ({ itemId: c.item.id, quantity: c.qty, variantId: c.variantId })) })
+      body: JSON.stringify({ branch: BRANCH, tableNumber: Number(TABLE), token: TOKEN, items: state.cart.map(c => ({ itemId: c.item.id, quantity: c.qty, variantId: c.variantId })) })
     });
     const j = await r.json();
     if (!j.success) throw new Error(j.error?.message);

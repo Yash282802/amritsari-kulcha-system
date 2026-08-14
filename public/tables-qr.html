@@ -47,18 +47,21 @@ document.getElementById('branch-sel').innerHTML = BRANCHES.map(b => `<option val
 async function load() {
   const branch = document.getElementById('branch-sel').value;
   const r = await fetch(`/api/tables/numbers?branch=${branch}`).then(x => x.json());
-  if (!r.success) return;
+  if (!r.success) {
+    if (r.error?.code === 'UNAUTHENTICATED') location.href = '/login';
+    return;
+  }
   const isLocal = ['localhost', '127.0.0.1'].some(x => location.hostname.startsWith(x));
   const base = isLocal
     ? 'http://' + (await fetch('/api/host').then(x => x.json()).catch(() => ({ host: location.host }))).host
     : location.origin;
-  document.getElementById('grid').innerHTML = r.data.tables.map(n => {
-    const url = `${base}/b/${branch}/${n}`;
+  document.getElementById('grid').innerHTML = r.data.tables.map(t => {
+    const url = `${base}/b/${branch}/${t.number}?t=${t.token}`;
     const qr = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(url)}`;
     return `
     <div class="qr-card bg-white border border-on-background/10 rounded-xl p-4 flex flex-col items-center gap-2 text-center">
-      <img src="${qr}" alt="QR for Table ${n}" width="240" height="240" class="rounded-lg">
-      <span class="font-headline-md text-primary text-xl">Table ${n}</span>
+      <img src="${qr}" alt="QR for Table ${t.number}" width="240" height="240" class="rounded-lg">
+      <span class="font-headline-md text-primary text-xl">Table ${t.number}</span>
       <span class="font-label-sm text-on-surface-variant break-all">${esc(url)}</span>
       <button class="no-print font-label-bold px-4 py-1.5 rounded-lg border border-primary text-primary hover:bg-primary/5" onclick="copy('${esc(url)}')">Copy link</button>
     </div>`;

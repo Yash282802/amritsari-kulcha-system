@@ -132,14 +132,6 @@ function doLogin(e) {
   });
   return false;
 }
-
-(async () => {
-  try {
-    const r = await fetch('/api/auth/me');
-    const j = await r.json();
-    if (j.success) location.href = { kitchen: '/kitchen', reception: '/reception', admin: '/admin' }[j.data.role] || '/login';
-  } catch {}
-})();
 </script>
 </body>
 </html>

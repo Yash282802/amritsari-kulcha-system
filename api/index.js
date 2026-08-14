@@ -205,14 +205,14 @@ export default async function handler(req, res) {
 
   // ---- Pages ----
   if (method === 'GET' && pathname === '/') {
-    res.writeHead(302, { Location: '/b/alkapuri/1' });
+    res.writeHead(302, { Location: '/login' });
     res.end();
     return;
   }
   const pageMatch = pathname.match(/^\/b\/([\w-]+)\/(\d+)$/);
   if (method === 'GET' && pageMatch) {
     const t = await getTableWithBranch(pageMatch[1], Number(pageMatch[2]));
-    if (!t) { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(fs.readFileSync(path.join(PUBLIC_DIR, 'invalid-qr.html'))); return; }
+    if (!t || t.token !== searchParams.get('t')) { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(fs.readFileSync(path.join(PUBLIC_DIR, 'invalid-qr.html'))); return; }
     res.writeHead(200, { 'Content-Type': 'text/html' });
     res.end(fs.readFileSync(path.join(PUBLIC_DIR, 'order.html')));
     return;
@@ -243,11 +243,11 @@ export default async function handler(req, res) {
     });
   }
 
-  // Public: create order
+  // Public: create order (token from QR required — prevents ordering from anywhere)
   if (method === 'POST' && pathname === '/api/orders') {
     const body = await readBody(req);
     const t = await getTableWithBranch(String(body.branch || ''), Number(body.tableNumber));
-    if (!t) return err(res, 'BAD_TABLE', 'This QR code is not valid. Please ask staff for help.');
+    if (!t || t.token !== String(body.token || '')) return err(res, 'BAD_TABLE', 'This QR code is not valid. Please ask staff for help.');
     const pending = await db.prepare("SELECT COUNT(*) AS n FROM bills WHERE table_id = ? AND payment_status = 'pending'").get(t.id);
     if (t.locked || Number(pending.n) > 0) {
       return err(res, 'TABLE_LOCKED', 'This table is currently being billed. Please ask staff.');
@@ -335,12 +335,14 @@ export default async function handler(req, res) {
     return ok(res, { host });
   }
 
-  // Public: table numbers for QR codes (only numbers — no occupancy/billing data)
+  // Staff-only: table numbers + QR tokens (only for QR code generation)
   if (method === 'GET' && pathname === '/api/tables/numbers') {
+    const s = await staffSession(req, res);
+    if (!s) return;
     const branch = searchParams.get('branch');
     if (!branch || !await db.prepare('SELECT id FROM branches WHERE id = ?').get(branch)) return err(res, 'BAD_REQUEST', 'invalid branch');
-    const rows = await db.prepare('SELECT table_number FROM tables WHERE branch_id = ? ORDER BY table_number').all(branch);
-    return ok(res, { branch, tables: rows.map(r => r.table_number) });
+    const rows = await db.prepare('SELECT table_number, token FROM tables WHERE branch_id = ? ORDER BY table_number').all(branch);
+    return ok(res, { branch, tables: rows.map(r => ({ number: r.table_number, token: r.token })) });
   }
 
   // Orders list (kitchen/reception)
