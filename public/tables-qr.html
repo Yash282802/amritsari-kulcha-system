@@ -24,6 +24,7 @@
       <h1 class="font-headline-md text-primary">Table QR Codes</h1>
     </div>
     <div class="flex items-center gap-2">
+      <button class="font-label-sm px-3 py-1.5 rounded-lg border border-primary text-primary hover:bg-primary/5" onclick="addTable()">Add Table</button>
       <button class="font-label-sm px-3 py-1.5 rounded-lg bg-primary text-on-primary" onclick="window.print()">Print</button>
     </div>
   </div>
@@ -63,9 +64,39 @@ async function load() {
       <img src="${qr}" alt="QR for Table ${t.number}" width="240" height="240" class="rounded-lg">
       <span class="font-headline-md text-primary text-xl">Table ${t.number}</span>
       <span class="font-label-sm text-on-surface-variant break-all">${esc(url)}</span>
-      <button class="no-print font-label-bold px-4 py-1.5 rounded-lg border border-primary text-primary hover:bg-primary/5" onclick="copy('${esc(url)}')">Copy link</button>
+      <div class="no-print flex items-center gap-2">
+        <button class="font-label-bold px-4 py-1.5 rounded-lg border border-primary text-primary hover:bg-primary/5" onclick="editNumber('${t.id}', ${t.number})">Edit number</button>
+        <button class="font-label-bold px-4 py-1.5 rounded-lg border border-primary text-primary hover:bg-primary/5" onclick="copy('${esc(url)}')">Copy link</button>
+      </div>
     </div>`;
   }).join('');
+}
+
+async function addTable() {
+  const branch = document.getElementById('branch-sel').value;
+  const input = prompt(`New table number for ${branch}:`);
+  if (!input) return;
+  const tableNumber = Number(input);
+  if (!Number.isInteger(tableNumber) || tableNumber <= 0) { alert('Enter a valid table number'); return; }
+  const r = await fetch('/api/tables', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ branch, tableNumber })
+  }).then(x => x.json());
+  if (!r.success) { alert(r.error?.message || 'Could not add table'); if (r.error?.code === 'UNAUTHENTICATED') location.href = '/login'; return; }
+  load();
+}
+
+async function editNumber(id, current) {
+  const input = prompt('Change table number to:', current);
+  if (input === null) return;
+  const tableNumber = Number(input);
+  if (!Number.isInteger(tableNumber) || tableNumber <= 0) { alert('Enter a valid table number'); return; }
+  const r = await fetch(`/api/tables/${id}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tableNumber })
+  }).then(x => x.json());
+  if (!r.success) { alert(r.error?.message || 'Could not update table'); if (r.error?.code === 'UNAUTHENTICATED') location.href = '/login'; return; }
+  load();
 }
 
 function copy(url) { navigator.clipboard?.writeText(url); alert('Copied: ' + url); }

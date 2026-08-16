@@ -21,7 +21,8 @@ async function run() {
 
   const menu = (await j('GET', '/api/catalog/menu?branch=alkapuri')).data.data;
   const item1 = menu.items[0], item2 = menu.items[4];
-  const order = await j('POST', '/api/orders', { branch: 'alkapuri', tableNumber: 3, items: [{ itemId: item1.id, quantity: 2, variantId: item1.variants[0]?.id }, { itemId: item2.id, quantity: 1 }] });
+  const t3token = (await j('GET', '/api/tables/numbers?branch=alkapuri', null, sid)).data.data.tables.find(t => t.number === 3).token;
+  const order = await j('POST', '/api/orders', { branch: 'alkapuri', tableNumber: 3, token: t3token, items: [{ itemId: item1.id, quantity: 2, variantId: item1.variants[0]?.id }, { itemId: item2.id, quantity: 1 }] });
   console.log('order placed:', order.data.data.orderId ? 'OK' : order.data);
   const orderId = order.data.data.orderId;
 
@@ -60,7 +61,7 @@ async function run() {
   const track2 = await j('GET', `/api/orders/${orderId}/track`);
   console.log('track sees bill subtotal:', track2.data.data.bill?.subtotal === bill.data.data.subtotal);
 
-  const blockedOrder = await j('POST', '/api/orders', { branch: 'alkapuri', tableNumber: 3, items: [{ itemId: item1.id, quantity: 1 }] });
+  const blockedOrder = await j('POST', '/api/orders', { branch: 'alkapuri', tableNumber: 3, token: t3token, items: [{ itemId: item1.id, quantity: 1 }] });
   console.log('order blocked while billing:', blockedOrder.status === 400);
 
   const pay = await j('PATCH', `/api/bills/${bill.data.data.id}/pay`, { method: 'upi', customerPhone: '9876543210' }, sidR);
@@ -77,6 +78,20 @@ async function run() {
   console.log('admin revenue:', rev.data.data.totalRevenue === bill.data.data.total ? 'matches bill' : rev.data);
   const revBad = await j('GET', '/api/admin/revenue?period=day', null, sidR);
   console.log('reception blocked from admin:', revBad.status === 403);
+
+  const tNo = 9000 + (Date.now() % 900);
+  const tNew = await j('POST', '/api/tables', { branch: 'alkapuri', tableNumber: tNo }, sidR);
+  console.log('table created:', tNew.data.data.number === tNo);
+  const tId = tNew.data.data.id;
+  const tDup = await j('POST', '/api/tables', { branch: 'alkapuri', tableNumber: tNo }, sidR);
+  console.log('duplicate table rejected:', tDup.status === 400);
+  const tRen = await j('PATCH', `/api/tables/${tId}`, { tableNumber: tNo - 1 }, sidR);
+  console.log('table renumbered:', tRen.data.data.number === tNo - 1);
+  const nums = (await j('GET', '/api/tables/numbers?branch=alkapuri', null, sidR)).data.data;
+  console.log('QR grid sees new number:', nums.tables.some(t => t.id === tId && t.number === tNo - 1));
+  const { default: pg } = await import('pg');
+  const cln = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  try { await cln.query('DELETE FROM tables WHERE id = $1', [tId]); } finally { await cln.end(); }
 
   console.log('\nALL FLOW CHECKS DONE');
 }

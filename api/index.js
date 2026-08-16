@@ -381,8 +381,46 @@ export default async function handler(req, res) {
     if (!s) return;
     const branch = searchParams.get('branch');
     if (!branch || !await db.prepare('SELECT id FROM branches WHERE id = ?').get(branch)) return err(res, 'BAD_REQUEST', 'invalid branch');
-    const rows = await db.prepare('SELECT table_number, token FROM tables WHERE branch_id = ? ORDER BY table_number').all(branch);
-    return ok(res, { branch, tables: rows.map(r => ({ number: r.table_number, token: r.token })) });
+    const rows = await db.prepare('SELECT id, table_number, token FROM tables WHERE branch_id = ? ORDER BY table_number').all(branch);
+    return ok(res, { branch, tables: rows.map(r => ({ id: r.id, number: r.table_number, token: r.token })) });
+  }
+
+  // Staff-only: create a new table + QR token
+  if (method === 'POST' && pathname === '/api/tables') {
+    if (!checkOrigin(req, res)) return;
+    const s = await staffSession(req, res);
+    if (!s) return;
+    const body = await readBody(req);
+    const branch = String(body.branch || '');
+    if (!branchScope(s, branch)) return err(res, 'FORBIDDEN', 'Not allowed for this branch', 403);
+    const tableNumber = Math.floor(Number(body.tableNumber));
+    if (!Number.isInteger(tableNumber) || tableNumber <= 0 || tableNumber > 9999) return err(res, 'BAD_REQUEST', 'Invalid table number');
+    const dup = await db.prepare('SELECT id FROM tables WHERE branch_id = ? AND table_number = ?').get(branch, tableNumber);
+    if (dup) return err(res, 'EXISTS', 'Table number already exists for this branch');
+    const id = uid('tbl');
+    const token = randomBytes(6).toString('hex');
+    await db.prepare('INSERT INTO tables (id, branch_id, table_number, token) VALUES (?,?,?,?)').run(id, branch, tableNumber, token);
+    return ok(res, { id, branch, number: tableNumber, token });
+  }
+
+  // Staff-only: change a table's number (QR token stays valid, QR data changes)
+  if (method === 'PATCH' && pathname.match(/^\/api\/tables\/([^/]+)$/)) {
+    if (!checkOrigin(req, res)) return;
+    const s = await staffSession(req, res);
+    if (!s) return;
+    const tableId = pathname.match(/^\/api\/tables\/([^/]+)$/)[1];
+    const table = await db.prepare('SELECT * FROM tables WHERE id = ?').get(tableId);
+    if (!table) return err(res, 'NOT_FOUND', 'Table not found', 404);
+    if (!branchScope(s, table.branch_id)) return err(res, 'FORBIDDEN', 'Not allowed for this branch', 403);
+    const body = await readBody(req);
+    const tableNumber = Math.floor(Number(body.tableNumber));
+    if (!Number.isInteger(tableNumber) || tableNumber <= 0 || tableNumber > 9999) return err(res, 'BAD_REQUEST', 'Invalid table number');
+    if (tableNumber !== table.table_number) {
+      const dup = await db.prepare('SELECT id FROM tables WHERE branch_id = ? AND table_number = ?').get(table.branch_id, tableNumber);
+      if (dup) return err(res, 'EXISTS', 'Table number already exists for this branch');
+      await db.prepare('UPDATE tables SET table_number = ? WHERE id = ?').run(tableNumber, tableId);
+    }
+    return ok(res, { id: tableId, branch: table.branch_id, number: tableNumber, token: table.token });
   }
 
   // Orders list (kitchen/reception)
