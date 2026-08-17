@@ -302,13 +302,14 @@ export default async function handler(req, res) {
           const item = (await q(client, 'SELECT * FROM menu_items WHERE id = ? AND available = 1', it.itemId)).rows[0];
           if (!item) throw { code: 'ITEM_UNAVAILABLE', message: 'An item you selected is no longer available. Please refresh and re-order.' };
           let variantPrice = 0;
+          let safeVariantId = null;
           if (it.variantId) {
             const v = (await q(client, 'SELECT * FROM menu_item_variants WHERE id = ? AND menu_item_id = ?', it.variantId, it.itemId)).rows[0];
-            if (v) variantPrice = Number(v.price_delta);
+            if (v) { variantPrice = Number(v.price_delta); safeVariantId = v.id; }
           }
           const qty = Math.min(99, Math.max(1, Math.floor(Number(it.quantity) || 1)));
           await q(client, 'INSERT INTO order_items (id, order_id, menu_item_id, variant_id, quantity, price_at_order) VALUES (?,?,?,?,?,?)',
-            uid('oi'), orderId, it.itemId, it.variantId || null, qty, Number(item.base_price) + variantPrice);
+            uid('oi'), orderId, it.itemId, safeVariantId, qty, Number(item.base_price) + variantPrice);
         }
         await q(client, "UPDATE tables SET status = 'occupied' WHERE id = ?", t.id);
       });
