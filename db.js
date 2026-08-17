@@ -116,7 +116,7 @@ const SCHEMA = `
     id TEXT PRIMARY KEY,
     order_id TEXT NOT NULL REFERENCES orders(id),
     menu_item_id TEXT NOT NULL REFERENCES menu_items(id),
-    variant_id TEXT REFERENCES menu_item_variants(id),
+    variant_id TEXT REFERENCES menu_item_variants(id) ON DELETE SET NULL,
     quantity INTEGER NOT NULL,
     price_at_order INTEGER NOT NULL
   );
@@ -179,6 +179,13 @@ const SCHEMA = `
     lock_until BIGINT
   );
   ALTER TABLE login_attempts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP;
+
+  DO $$ BEGIN
+    ALTER TABLE order_items DROP CONSTRAINT IF EXISTS order_items_variant_id_fkey;
+    ALTER TABLE order_items ADD CONSTRAINT order_items_variant_id_fkey
+      FOREIGN KEY (variant_id) REFERENCES menu_item_variants(id) ON DELETE SET NULL;
+  EXCEPTION WHEN undefined_object THEN NULL;
+  END $$;
 
   CREATE INDEX IF NOT EXISTS idx_orders_queue ON orders(branch_id, status);
   CREATE INDEX IF NOT EXISTS idx_bills_pay ON bills(payment_status, branch_id);
